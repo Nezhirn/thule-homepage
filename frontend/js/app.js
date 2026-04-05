@@ -21,6 +21,24 @@ class HomepageApp {
         this.init();
     }
 
+    /* Detect grid columns from actual CSS computed style */
+    _detectGridCols() {
+        const grid = document.getElementById('cards-grid');
+        if (grid) {
+            const val = parseInt(getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+            if (val > 0) {
+                this.gridCols = val;
+                return;
+            }
+        }
+        /* Fallback: match breakpoint manually */
+        const w = window.innerWidth;
+        if (w <= 480) this.gridCols = 2;
+        else if (w <= 768) this.gridCols = 3;
+        else if (w <= 1024) this.gridCols = 4;
+        else this.gridCols = 7;
+    }
+
     _searchUrl(e) { return { google:'https://www.google.com/search?q=', duckduckgo:'https://duckduckgo.com/?q=', bing:'https://www.bing.com/search?q=', yandex:'https://yandex.com/search/?text=' }[e] || 'https://www.google.com/search?q='; }
     _engineIcon(e) { return `https://${e==='duckduckgo'?'duckduckgo.com':'www.'+e}.com/favicon.ico`; }
 
@@ -31,6 +49,8 @@ class HomepageApp {
         this._applyEditMode();
         this._updateEngineIcon();
 
+        this._detectGridCols();
+
         this._setupModals();
         this._setupSearch();
         this._setupButtons();
@@ -39,6 +59,16 @@ class HomepageApp {
 
         /* Init drag & drop ONCE — bound to grid, not to individual cards */
         this._initDragDrop();
+
+        /* Re-detect grid cols on resize */
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                this._detectGridCols();
+                this.renderCards();
+            }, 150);
+        });
     }
 
     /* ==================== Edit mode ==================== */
@@ -52,23 +82,20 @@ class HomepageApp {
         }
     }
 
-    /* ==================== Drag & Drop (mouse-based, snap-to-grid) ==================== */
+    /* ==================== Drag & Drop (mouse+touch, snap-to-grid) ==================== */
     _initDragDrop() {
         const grid = document.getElementById('cards-grid');
         const d = this._drag;
 
-        /* --- mousedown --- */
-        grid.addEventListener('mousedown', e => {
+        /* Unified start handler — works for both mouse and touch */
+        const startDrag = (clientX, clientY, card) => {
             if (!this.editMode) return;
-            const card = e.target.closest('.card');
-            if (!card) return;
-            if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown')) return;
 
             const rect = card.getBoundingClientRect();
             d.active = true;
             d.card = card;
-            d.sx = e.clientX;
-            d.sy = e.clientY;
+            d.sx = clientX;
+            d.sy = clientY;
             d.ox = rect.left;
             d.oy = rect.top;
             d.targetCol = null;
@@ -85,14 +112,13 @@ class HomepageApp {
             });
             document.body.appendChild(d.ghost);
             card.style.opacity = '0.3';
-            e.preventDefault();
-        });
+        };
 
-        /* --- mousemove — highlight target cell or card --- */
-        document.addEventListener('mousemove', e => {
+        /* Unified move handler */
+        const moveDrag = (clientX, clientY) => {
             if (!d.active || !d.ghost) return;
-            d.ghost.style.left = (d.ox + e.clientX - d.sx) + 'px';
-            d.ghost.style.top  = (d.oy + e.clientY - d.sy) + 'px';
+            d.ghost.style.left = (d.ox + clientX - d.sx) + 'px';
+            d.ghost.style.top  = (d.oy + clientY - d.sy) + 'px';
 
             /* Remove previous highlights */
             grid.querySelectorAll('.cell-highlight').forEach(c => c.classList.remove('cell-highlight'));
@@ -104,7 +130,7 @@ class HomepageApp {
 
             /* Find target under cursor */
             d.ghost.style.display = 'none';
-            const el = document.elementFromPoint(e.clientX, e.clientY);
+            const el = document.elementFromPoint(clientX, clientY);
             d.ghost.style.display = '';
 
             const targetCell = el?.closest('.grid-cell');
@@ -122,7 +148,7 @@ class HomepageApp {
                 d.targetRow = tc?.grid_row || 1;
             } else {
                 /* Fallback: calculate from grid coordinates, show cursor */
-                const [col, row] = this._calcGridPos(e.clientX, e.clientY);
+                const [col, row] = this._calcGridPos(clientX, clientY);
                 d.targetCol = col;
                 d.targetRow = row;
                 d.cursor = this._makeCursorIndicator();
@@ -138,10 +164,10 @@ class HomepageApp {
                 d.cursor.style.height = cellH + 'px';
                 document.body.appendChild(d.cursor);
             }
-        });
+        };
 
-        /* --- mouseup — snap to grid or swap --- */
-        document.addEventListener('mouseup', async () => {
+        /* Unified end handler */
+        const endDrag = async () => {
             if (!d.active) return;
 
             if (d.ghost) {
@@ -162,8 +188,6 @@ class HomepageApp {
                         Components.showToast('Card moved to (' + col + ',' + row + ')');
                     } catch (err) { Components.showToast('Failed: ' + err.message, 'error'); }
 
-                    /* Also update the swapped card if it moved */
-                    /* re-render to reflect changes */
                     this.renderCards();
                 }
 
@@ -175,19 +199,92 @@ class HomepageApp {
             grid.querySelectorAll('.card.drag-over').forEach(c => c.classList.remove('drag-over'));
 
             d.active = false; d.ghost = null; d.card = null; d.targetCol = null; d.targetRow = null;
+        };
+
+        /* --- Mouse events --- */
+        grid.addEventListener('mousedown', e => {
+            if (!this.editMode) return;
+            const card = e.target.closest('.card');
+            if (!card) return;
+            if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown')) return;
+
+            startDrag(e.clientX, e.clientY, card);
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', e => {
+            moveDrag(e.clientX, e.clientY);
+        });
+
+        document.addEventListener('mouseup', endDrag);
+
+        /* --- Touch events --- */
+        let touchStartTimer = null;
+        let touchHandled = false;
+
+        grid.addEventListener('touchstart', e => {
+            if (!this.editMode) return;
+            const card = e.target.closest('.card');
+            if (!card) return;
+            if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown')) return;
+
+            const touch = e.touches[0];
+            touchHandled = false;
+
+            /* Wait 300ms before starting a drag to distinguish from tap/scroll */
+            touchStartTimer = setTimeout(() => {
+                touchHandled = true;
+                startDrag(touch.clientX, touch.clientY, card);
+            }, 300);
+        }, { passive: true });
+
+        grid.addEventListener('touchmove', e => {
+            if (!d.active) {
+                /* If user starts scrolling before drag activates, cancel the drag */
+                clearTimeout(touchStartTimer);
+                return;
+            }
+
+            /* Prevent page scroll while dragging */
+            if (d.active) e.preventDefault();
+            const touch = e.touches[0];
+            moveDrag(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        grid.addEventListener('touchend', () => {
+            clearTimeout(touchStartTimer);
+            if (touchHandled) {
+                endDrag();
+                touchHandled = false;
+            }
+        });
+
+        grid.addEventListener('touchcancel', () => {
+            clearTimeout(touchStartTimer);
+            if (touchHandled) {
+                endDrag();
+                touchHandled = false;
+            }
         });
     }
 
-    /* Calculate grid column/row from absolute mouse coordinates */
+    /* Calculate grid column/row from absolute coordinates */
     _calcGridPos(mx, my) {
         const grid = document.getElementById('cards-grid');
         const gridRect = grid.getBoundingClientRect();
-        const gap = 16, cellH = 160, padding = 16;
-        const usableWidth = gridRect.width - padding * 2 - gap * 2;
-        const colWidth = usableWidth / this.gridCols;
-        const col = Math.floor((mx - gridRect.left - padding) / (colWidth + gap)) + 1;
-        const row = Math.floor((my - gridRect.top - padding) / (cellH + gap)) + 1;
-        return [Math.max(1, col), Math.max(1, row)];
+        const style = getComputedStyle(grid);
+        const cols = style.gridTemplateColumns.split(' ').length;
+        this.gridCols = cols;
+
+        const gap = parseFloat(style.gap) || 16;
+        const paddingTop = 16;
+        const cellH = Math.round(gridRect.height / Math.max(1, parseFloat(style.gridAutoRows) || 160));
+
+        const usableWidth = gridRect.width - gap * (cols - 1);
+        const colWidth = usableWidth / cols;
+        const col = Math.floor((mx - gridRect.left - paddingTop) / (colWidth + gap)) + 1;
+        const row = Math.floor((my - gridRect.top - paddingTop) / (cellH + gap)) + 1;
+        return [Math.max(1, Math.min(col, cols)), Math.max(1, row)];
     }
 
     /* Create drop-target cursor indicator */
