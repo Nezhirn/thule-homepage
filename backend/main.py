@@ -216,6 +216,14 @@ def get_settings():
         cursor.execute("SELECT * FROM settings LIMIT 1")
         row = cursor.fetchone()
 
+    # Sanitise: if background_image references a missing file, clear it
+    bg = row["background_image"]
+    if bg and not os.path.exists(os.path.join(UPLOADS_DIR, bg)):
+        cursor.execute("UPDATE settings SET background_image = NULL WHERE id = ?", (row["id"],))
+        conn.commit()
+        cursor.execute("SELECT * FROM settings WHERE id = ?", (row["id"],))
+        row = cursor.fetchone()
+
     conn.close()
 
     return SettingsResponse(
@@ -643,6 +651,14 @@ def get_full_data():
         cursor.execute("INSERT INTO settings (blur_radius, dark_mode) VALUES (0, 0)")
         conn.commit()
         cursor.execute("SELECT * FROM settings LIMIT 1")
+        settings_row = cursor.fetchone()
+
+    # Sanitise: if background_image references a missing file, clear it
+    bg = settings_row["background_image"]
+    if bg and not os.path.exists(os.path.join(UPLOADS_DIR, bg)):
+        cursor.execute("UPDATE settings SET background_image = NULL WHERE id = ?", (settings_row["id"],))
+        conn.commit()
+        cursor.execute("SELECT * FROM settings WHERE id = ?", (settings_row["id"],))
         settings_row = cursor.fetchone()
 
     settings = SettingsResponse(

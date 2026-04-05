@@ -130,12 +130,10 @@ const Components = {
 
     updateBackground(imageUrl, blurRadius) {
         const bg = document.getElementById('background-image');
-        const ov = document.getElementById('background-overlay');
         if (imageUrl) { bg.style.backgroundImage = 'url(' + imageUrl + ')'; bg.style.opacity = '1'; }
         else { bg.style.backgroundImage = 'none'; bg.style.opacity = '0'; }
         const blur = blurRadius > 0 ? 'blur(' + blurRadius + 'px)' : 'none';
-        ov.style.backdropFilter = blur;
-        ov.style.webkitBackdropFilter = blur;
+        bg.style.filter = blur;
     },
 
     showModal(id) {

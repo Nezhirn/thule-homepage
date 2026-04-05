@@ -152,22 +152,15 @@ class HomepageApp {
                 const movedCardId = parseInt(d.card.dataset.id);
                 const movedCard = this.cards.find(c => c.id === movedCardId);
 
-                console.log('[drag] mouseup targetCol=', d.targetCol, 'targetRow=', d.targetRow, 'card=', movedCard?.title);
-
                 if (movedCard && d.targetCol !== null && d.targetRow !== null) {
                     const [col, row] = this._resolveCollision(movedCard, d.targetCol, d.targetRow);
                     movedCard.grid_col = col;
                     movedCard.grid_row = row;
 
-                    console.log('[drag] resolved to', col, row);
-
                     try {
                         await api.updateCard(movedCardId, { grid_col: col, grid_row: row });
                         Components.showToast('Card moved to (' + col + ',' + row + ')');
-                        this.renderCards();
-                    } catch (err) { Components.showToast('Failed: ' + err.message, 'error'); console.error('[drag] API error:', err); }
-                } else {
-                    console.log('[drag] SKIP: movedCard=', !!movedCard, 'targetCol=', d.targetCol, 'targetRow=', d.targetRow);
+                    } catch (err) { Components.showToast('Failed: ' + err.message, 'error'); }
                 }
 
                 if (d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
@@ -350,24 +343,34 @@ class HomepageApp {
             try {
                 const r = await api.uploadImage(file);
                 this.settings.background_image = r.filename;
-                await api.updateSettings({ background_image: r.filename });
+                const blur = parseInt(document.getElementById('blur-slider').value) || 0;
+                this.settings.blur_radius = blur;
+                await api.updateSettings({ background_image: r.filename, blur_radius: blur });
                 img.src = r.url; ph.style.display = 'none'; prev.style.display = 'block';
-                Components.updateBackground(r.url, this.settings.blur_radius || 0);
+                Components.updateBackground(r.url, blur);
                 Components.showToast('Background uploaded');
-            } catch (_) { Components.showToast('Upload failed', 'error'); }
+            } catch (err) { console.error('[bg-upload] error', err); Components.showToast('Upload failed: ' + err.message, 'error'); }
         });
 
         rm?.addEventListener('click', async e => {
             e.stopPropagation();
-            if (this.settings.background_image) {
-                try {
-                    await api.deleteImage(this.settings.background_image);
-                    this.settings.background_image = null;
-                    await api.updateSettings({ background_image: null });
-                    Components.updateBackground(null, this.settings.blur_radius || 0);
-                    ph.style.display = 'flex'; prev.style.display = 'none';
-                    Components.showToast('Background removed');
-                } catch (_) { Components.showToast('Failed', 'error'); }
+            if (!this.settings?.background_image) return;
+            try {
+                const filename = this.settings.background_image;
+                const cleanName = filename.startsWith('/') ? filename.split('/').pop() : filename;
+                // Delete file — tolerate missing file (already gone)
+                try { await api.deleteImage(cleanName); } catch (e) { if (!e.message.includes('File not found')) throw e; }
+                this.settings.background_image = null;
+                const blur = parseInt(document.getElementById('blur-slider').value) || 0;
+                this.settings.blur_radius = blur;
+                await api.updateSettings({ background_image: null, blur_radius: blur });
+                Components.updateBackground(null, blur);
+                ph.style.display = 'flex';
+                prev.style.display = 'none';
+                Components.showToast('Background removed');
+            } catch (err) {
+                console.error('[bg-remove] error', err);
+                Components.showToast('Failed: ' + err.message, 'error');
             }
         });
     }
