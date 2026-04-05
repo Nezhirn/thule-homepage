@@ -6,7 +6,6 @@ FROM python:3.14-slim AS production
 # Metadata
 LABEL maintainer="thuleseeker"
 LABEL description="Homepage API - FastAPI-based customizable homepage with cards"
-LABEL version="1.0.1"
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
