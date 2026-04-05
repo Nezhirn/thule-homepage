@@ -245,16 +245,6 @@ docker compose -f docker-compose.prod.yml up -d
 - Health-check для мониторинга доступности
 - Ограничение ресурсов (512MB RAM, 0.5 CPU)
 
-### С reverse proxy (Caddy + TLS)
-
-Раскомментируйте секцию `caddy` в `docker-compose.prod.yml` и создайте `Caddyfile`:
-
-```
-your-domain.com {
-    reverse_proxy homepage:8000
-}
-```
-
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 ```
@@ -268,8 +258,6 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 # Или через Gunicorn
 gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
 ```
-
-Рекомендуется добавить reverse proxy (nginx/caddy) для TLS и кэширования статики.
 
 ### Docker Hub
 
