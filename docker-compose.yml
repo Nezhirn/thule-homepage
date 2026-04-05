@@ -2,26 +2,11 @@ services:
   homepage:
     image: thuleseeker/thule:latest
     container_name: thule-homepage
-    build:
-      context: .
-      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     volumes:
       # Persistent data (database + uploaded images)
-      - homepage-data:/app/data
+      - ./homepage-data:/app/data
     environment:
       - TZ=Europe/Moscow
-      - UPLOADS_DIR=/app/data/uploads
-      - DATABASE_PATH=/app/data/homepage.db
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-
-volumes:
-  homepage-data:
-    driver: local
