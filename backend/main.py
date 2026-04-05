@@ -9,7 +9,7 @@ import re
 import json
 from contextlib import asynccontextmanager
 from typing import Optional, List
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, unquote
 
 import httpx
 from fastapi import FastAPI, HTTPException, UploadFile, File
@@ -147,13 +147,20 @@ def _validate_url_field(url: Optional[str]) -> Optional[str]:
     return url
 
 
-def _validate_filename(filename: str) -> str:
-    """Validate filename to prevent path traversal."""
-    if not filename:
-        return filename
-    if ".." in filename or "/" in filename or "\\" in filename:
+def _validate_icon_path(icon_path: str) -> str:
+    """Validate icon_path. Accepts either a full URL (http/https) or a safe local filename.
+    Rejects path traversal in local filenames. Returns the original value if valid."""
+    if not icon_path:
+        return icon_path
+    # If it's a URL, allow it (frontend validates the scheme via _validate_url_field on card.url,
+    # but icon_path itself can be a URL like https://example.com/icon.svg)
+    parsed = urlparse(icon_path)
+    if parsed.scheme in ("http", "https"):
+        return icon_path
+    # Local filename — reject path traversal
+    if ".." in icon_path or "/" in icon_path or "\\" in icon_path:
         raise HTTPException(status_code=400, detail="Invalid filename")
-    return filename
+    return icon_path
 
 
 def _validate_file(file: UploadFile):
@@ -480,7 +487,7 @@ def create_card(card_create: CardCreate):
     cursor = conn.cursor()
 
     safe_url = _validate_url_field(card_create.url)
-    safe_icon = _validate_filename(card_create.icon_path) if card_create.icon_path else None
+    safe_icon = _validate_icon_path(card_create.icon_path) if card_create.icon_path else None
 
     # Auto-place: if requested position is occupied, find nearest free cell
     col, row = card_create.grid_col, card_create.grid_row
@@ -534,7 +541,7 @@ def update_card(card_id: int, card_update: CardUpdate):
         values.append(safe_url)
 
     if card_update.icon_path is not None:
-        safe_icon = _validate_filename(card_update.icon_path)
+        safe_icon = _validate_icon_path(card_update.icon_path)
         # Delete old icon file if replacing
         old_icon = card["icon_path"]
         if old_icon and old_icon != safe_icon:
