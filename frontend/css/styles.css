@@ -1174,6 +1174,12 @@ body.edit-mode .btn-add-card-fab {
         grid-auto-rows: minmax(140px, auto);
     }
 
+    /* Reset desktop positions — let cards flow naturally */
+    .card {
+        grid-column: auto !important;
+        grid-row: auto !important;
+    }
+
     .card[data-size="2x1"] { grid-column: span 2 !important; }
     .card[data-size="2x2"] { grid-column: span 2 !important; }
     .card[data-size="1x2"] { grid-column: span 1 !important; }
@@ -1333,6 +1339,12 @@ body.edit-mode .btn-add-card-fab {
         gap: 12px;
         padding: 8px 2px;
         grid-auto-rows: auto;
+    }
+
+    /* Reset desktop positions — let cards flow naturally */
+    .card {
+        grid-column: auto !important;
+        grid-row: auto !important;
     }
 
     .card[data-size="2x1"] { grid-column: span 2 !important; }
