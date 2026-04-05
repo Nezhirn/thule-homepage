@@ -246,7 +246,7 @@ docker compose -f docker-compose.prod.yml up -d
 - Ограничение ресурсов (512MB RAM, 0.5 CPU)
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.yml up -d
 ```
 
 ### Ручной запуск
