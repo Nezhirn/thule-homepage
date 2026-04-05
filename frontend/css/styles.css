@@ -1264,15 +1264,17 @@ body.edit-mode .btn-add-card-fab {
 
 /* --- Phone (up to 480px) --- */
 @media (max-width: 480px) {
+
+    /* --- Header compact --- */
     .app-container {
-        padding: var(--space-sm);
-        padding-top: env(safe-area-inset-top, var(--space-sm));
-        padding-bottom: env(safe-area-inset-bottom, var(--space-sm));
+        padding: 10px;
+        padding-top: env(safe-area-inset-top, 10px);
+        padding-bottom: env(safe-area-inset-bottom, 10px);
     }
 
     .header {
-        padding: var(--space-sm);
-        margin-bottom: var(--space-md);
+        padding: 10px;
+        margin-bottom: 14px;
         border-radius: var(--radius-md);
     }
 
@@ -1285,7 +1287,7 @@ body.edit-mode .btn-add-card-fab {
     }
 
     .search-engine-select {
-        width: 38px;
+        width: 36px;
         height: 34px;
     }
 
@@ -1325,11 +1327,12 @@ body.edit-mode .btn-add-card-fab {
         min-width: 36px;
     }
 
+    /* --- 2-column grid with spacious cards --- */
     .cards-grid {
         grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-        padding: var(--space-xs) 0;
-        grid-auto-rows: minmax(130px, auto);
+        gap: 12px;
+        padding: 8px 2px;
+        grid-auto-rows: auto;
     }
 
     .card[data-size="2x1"] { grid-column: span 2 !important; }
@@ -1337,19 +1340,19 @@ body.edit-mode .btn-add-card-fab {
     .card[data-size="1x2"] { grid-column: span 1 !important; }
 
     .card {
-        min-height: 110px;
-        padding: var(--space-sm) var(--space-md);
+        min-height: 140px;
+        padding: var(--space-md);
         border-radius: var(--radius-lg);
     }
 
     .card-icon {
-        width: 36px;
-        height: 36px;
-        margin-bottom: var(--space-sm);
+        width: 48px;
+        height: 48px;
+        margin-bottom: var(--space-md);
     }
 
     .card-title {
-        font-size: 12px;
+        font-size: 13px;
         -webkit-line-clamp: 3;
     }
 
@@ -1539,50 +1542,39 @@ body.edit-mode .btn-add-card-fab {
     }
 }
 
-/* --- Very small phones (up to 360px) --- */
-@media (max-width: 360px) {
+/* --- Very small phones (up to 380px) — single column list --- */
+@media (max-width: 380px) {
     .cards-grid {
-        gap: 8px;
-        grid-auto-rows: minmax(120px, auto);
+        grid-template-columns: 1fr;
+        gap: 12px;
     }
 
     .card {
         min-height: 100px;
-        padding: var(--space-sm);
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: var(--space-md);
+        padding: var(--space-md) var(--space-lg);
     }
 
     .card-icon {
-        width: 32px;
-        height: 32px;
+        width: 40px;
+        height: 40px;
+        margin-bottom: 0;
+        flex-shrink: 0;
+        border-radius: var(--radius-sm);
     }
 
     .card-title {
-        font-size: 11px;
+        font-size: 14px;
+        text-align: left;
+        -webkit-line-clamp: 2;
     }
 
-    .card-menu-btn {
-        width: 26px;
-        height: 26px;
-    }
-
-    .header {
-        padding: 8px;
-    }
-
-    .search-input {
-        padding: 6px 4px;
-        font-size: 13px;
-    }
-
-    .search-engine-select {
-        width: 34px;
-        height: 32px;
-    }
-
-    .search-submit-btn {
-        width: 32px;
-        height: 32px;
-        min-width: 32px;
+    .card[data-size="2x1"],
+    .card[data-size="2x2"],
+    .card[data-size="1x2"] {
+        grid-column: 1 / -1 !important;
     }
 }
 
