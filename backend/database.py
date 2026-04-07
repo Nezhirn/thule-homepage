@@ -81,10 +81,8 @@ def init_db():
             if "grid_row" not in cards_columns:
                 cursor.execute("ALTER TABLE cards ADD COLUMN grid_row INTEGER DEFAULT 1")
 
-    # Insert default settings if not exists
-    cursor.execute("SELECT COUNT(*) FROM settings")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO settings (blur_radius, dark_mode) VALUES (0, 0)")
+    # Add index for grid-based queries if not exists
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cards_grid ON cards (grid_row, grid_col)")
 
     conn.commit()
     conn.close()

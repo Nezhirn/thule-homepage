@@ -1,7 +1,7 @@
 # =========================
 # Production Dockerfile
 # =========================
-FROM python:3.14-slim AS production
+FROM python:3.12-slim AS production
 
 # Metadata
 LABEL maintainer="thuleseeker"

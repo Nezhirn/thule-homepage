@@ -1,3 +1,2 @@
-# Models are defined in main.py using sqlite3 directly.
-# This file exists for structural clarity.
-# See main.py for all Pydantic model definitions.
+# Data models are defined using SQLite directly in database.py.
+# Pydantic schemas for the API are defined in schemas.py.

@@ -39,7 +39,7 @@ const Components = {
         iconDiv.className = 'card-icon';
         if (card.icon_path) {
             const img = document.createElement('img');
-            img.src = card.icon_path.startsWith('http') ? card.icon_path : '/api/uploads/' + card.icon_path;
+            img.src = Components.resolveIconUrl(card.icon_path);
             img.alt = card.title;
             img.loading = 'lazy';
             img.onerror = () => { iconDiv.classList.add('default'); iconDiv.innerHTML = Components._defaultIcon(); };
@@ -57,7 +57,7 @@ const Components = {
 
         if (card.url && !editMode) {
             el.style.cursor = 'pointer';
-            el.addEventListener('click', () => window.open(card.url, '_blank'));
+            el.addEventListener('click', () => window.open(card.url, '_blank', 'noopener,noreferrer'));
         }
 
         return el;
@@ -85,6 +85,12 @@ const Components = {
         });
         dd.appendChild(eb); dd.appendChild(db);
         return dd;
+    },
+
+    /** Resolve an icon_path to a display URL. Handles both external URLs and local uploads. */
+    resolveIconUrl(icon_path) {
+        if (!icon_path) return null;
+        return icon_path.startsWith('http') ? icon_path : '/api/uploads/' + icon_path;
     },
 
     _defaultIcon() {

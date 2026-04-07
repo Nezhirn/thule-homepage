@@ -2,6 +2,14 @@
  * Homepage Application
  */
 
+/* Centralised search-engine configuration — single source of truth */
+const SEARCH_ENGINES = {
+    google:     { url: 'https://www.google.com/search?q=',     icon: 'https://www.google.com/favicon.ico' },
+    duckduckgo: { url: 'https://duckduckgo.com/?q=',           icon: 'https://duckduckgo.com/favicon.ico' },
+    bing:       { url: 'https://www.bing.com/search?q=',       icon: 'https://www.bing.com/s/a/bing.ico' },
+    yandex:     { url: 'https://yandex.com/search/?text=',     icon: 'https://yandex.com/favicon.ico' },
+};
+
 class HomepageApp {
     constructor() {
         this.settings = null;
@@ -12,11 +20,11 @@ class HomepageApp {
 
         // Search
         this.searchEngine = localStorage.getItem('searchEngine') || 'google';
-        this.searchUrl = this._searchUrl(this.searchEngine);
+        this.searchUrl = this._engineUrl(this.searchEngine);
         this.searchTimeout = null;
 
         // Drag & drop state (single shared instance)
-        this._drag = { active: false, ghost: null, card: null, sx: 0, sy: 0, ox: 0, oy: 0 };
+        this._drag = { active: false, ghost: null, cursor: null, card: null, sx: 0, sy: 0, ox: 0, oy: 0 };
 
         this.init();
     }
@@ -26,12 +34,8 @@ class HomepageApp {
         const grid = document.getElementById('cards-grid');
         if (grid) {
             const val = parseInt(getComputedStyle(grid).gridTemplateColumns.split(' ').length);
-            if (val > 0) {
-                this.gridCols = val;
-                return;
-            }
+            if (val > 0) { this.gridCols = val; return; }
         }
-        /* Fallback: match breakpoint manually */
         const w = window.innerWidth;
         if (w <= 480) this.gridCols = 2;
         else if (w <= 768) this.gridCols = 3;
@@ -39,35 +43,25 @@ class HomepageApp {
         else this.gridCols = 7;
     }
 
-    _searchUrl(e) { return { google:'https://www.google.com/search?q=', duckduckgo:'https://duckduckgo.com/?q=', bing:'https://www.bing.com/search?q=', yandex:'https://yandex.com/search/?text=' }[e] || 'https://www.google.com/search?q='; }
-    _engineIcon(e) { return `https://${e==='duckduckgo'?'duckduckgo.com':'www.'+e}.com/favicon.ico`; }
+    _engineUrl(engine) { return (SEARCH_ENGINES[engine] || SEARCH_ENGINES.google).url; }
+    _engineIcon(engine) { return (SEARCH_ENGINES[engine] || SEARCH_ENGINES.google).icon; }
 
     async init() {
         Components.setTheme(localStorage.getItem('theme') || 'light');
-
         this.editMode = localStorage.getItem('editMode') === 'true';
         this._applyEditMode();
         this._updateEngineIcon();
-
         this._detectGridCols();
-
         this._setupModals();
         this._setupSearch();
         this._setupButtons();
-
         await this.loadData();
-
-        /* Init drag & drop ONCE — bound to grid, not to individual cards */
         this._initDragDrop();
 
-        /* Re-detect grid cols on resize */
         let resizeTimer;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => {
-                this._detectGridCols();
-                this.renderCards();
-            }, 150);
+            resizeTimer = setTimeout(() => { this._detectGridCols(); this.renderCards(); }, 150);
         });
     }
 
@@ -83,25 +77,27 @@ class HomepageApp {
     }
 
     /* ==================== Drag & Drop (mouse+touch, snap-to-grid) ==================== */
+    _cleanupDrag() {
+        const d = this._drag;
+        if (d.cursor) { d.cursor.remove(); d.cursor = null; }
+        if (d.ghost) {
+            if (d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
+            d.ghost = null;
+        }
+    }
+
     _initDragDrop() {
         const grid = document.getElementById('cards-grid');
         const d = this._drag;
 
-        /* Unified start handler — works for both mouse and touch */
         const startDrag = (clientX, clientY, card) => {
             if (!this.editMode) return;
-
             const rect = card.getBoundingClientRect();
-            d.active = true;
-            d.card = card;
-            d.sx = clientX;
-            d.sy = clientY;
-            d.ox = rect.left;
-            d.oy = rect.top;
-            d.targetCol = null;
-            d.targetRow = null;
+            d.active = true; d.card = card;
+            d.sx = clientX; d.sy = clientY;
+            d.ox = rect.left; d.oy = rect.top;
+            d.targetCol = null; d.targetRow = null;
 
-            /* ghost */
             d.ghost = card.cloneNode(true);
             Object.assign(d.ghost.style, {
                 position: 'fixed', width: rect.width + 'px', height: rect.height + 'px',
@@ -114,21 +110,16 @@ class HomepageApp {
             card.style.opacity = '0.3';
         };
 
-        /* Unified move handler */
         const moveDrag = (clientX, clientY) => {
             if (!d.active || !d.ghost) return;
             d.ghost.style.left = (d.ox + clientX - d.sx) + 'px';
             d.ghost.style.top  = (d.oy + clientY - d.sy) + 'px';
 
-            /* Remove previous highlights */
             grid.querySelectorAll('.cell-highlight').forEach(c => c.classList.remove('cell-highlight'));
             grid.querySelectorAll('.card.drag-over').forEach(c => c.classList.remove('drag-over'));
-
-            /* Remove previous cursor indicator */
             if (d.cursor) d.cursor.remove();
             d.cursor = null;
 
-            /* Find target under cursor */
             d.ghost.style.display = 'none';
             const el = document.elementFromPoint(clientX, clientY);
             d.ghost.style.display = '';
@@ -147,17 +138,18 @@ class HomepageApp {
                 d.targetCol = tc?.grid_col || 1;
                 d.targetRow = tc?.grid_row || 1;
             } else {
-                /* Fallback: calculate from grid coordinates, show cursor */
                 const [col, row] = this._calcGridPos(clientX, clientY);
-                d.targetCol = col;
-                d.targetRow = row;
+                d.targetCol = col; d.targetRow = row;
                 d.cursor = this._makeCursorIndicator();
                 const gridRect = grid.getBoundingClientRect();
-                const gap = 16, cellH = 160, padding = 16;
-                const usableWidth = gridRect.width - padding * 2 - gap * 2;
+                const style = getComputedStyle(grid);
+                const gap = parseFloat(style.gap) || 16;
+                const paddingLeft = parseFloat(style.paddingLeft) || parseFloat(style.padding) || 16;
+                const cellH = Math.round(gridRect.height / Math.max(1, parseFloat(style.gridAutoRows) || 160));
+                const usableWidth = gridRect.width - paddingLeft * 2 - gap * 2;
                 const colWidth = usableWidth / this.gridCols;
-                const x = padding + (col - 1) * (colWidth + gap) + colWidth / 2;
-                const y = padding + (row - 1) * (cellH + gap) + cellH / 2;
+                const x = paddingLeft + (col - 1) * (colWidth + gap) + colWidth / 2;
+                const y = parseFloat(style.paddingTop) + (row - 1) * (cellH + gap) + cellH / 2;
                 d.cursor.style.left = (gridRect.left + x) + 'px';
                 d.cursor.style.top = (gridRect.top + y) + 'px';
                 d.cursor.style.width = colWidth + 'px';
@@ -166,106 +158,74 @@ class HomepageApp {
             }
         };
 
-        /* Unified end handler */
         const endDrag = async () => {
             if (!d.active) return;
 
             if (d.ghost) {
                 d.ghost.style.display = 'none';
-                if (d.cursor) d.cursor.remove();
-                d.cursor = null;
-
                 const movedCardId = parseInt(d.card.dataset.id);
                 const movedCard = this.cards.find(c => c.id === movedCardId);
 
                 if (movedCard && d.targetCol !== null && d.targetRow !== null) {
+                    const origCol = movedCard.grid_col;
+                    const origRow = movedCard.grid_row;
                     const [col, row] = this._resolveCollision(movedCard, d.targetCol, d.targetRow);
-                    movedCard.grid_col = col;
-                    movedCard.grid_row = row;
 
                     try {
                         await api.updateCard(movedCardId, { grid_col: col, grid_row: row });
+                        movedCard.grid_col = col;
+                        movedCard.grid_row = row;
                         Components.showToast('Card moved to (' + col + ',' + row + ')');
-                    } catch (err) { Components.showToast('Failed: ' + err.message, 'error'); }
-
+                    } catch (err) {
+                        movedCard.grid_col = origCol;
+                        movedCard.grid_row = origRow;
+                        Components.showToast('Failed: ' + err.message, 'error');
+                    }
                     this.renderCards();
                 }
-
-                if (d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
             }
 
+            this._cleanupDrag();
             if (d.card) d.card.style.opacity = '';
             grid.querySelectorAll('.cell-highlight').forEach(c => c.classList.remove('cell-highlight'));
             grid.querySelectorAll('.card.drag-over').forEach(c => c.classList.remove('drag-over'));
-
-            d.active = false; d.ghost = null; d.card = null; d.targetCol = null; d.targetRow = null;
+            d.active = false; d.card = null; d.targetCol = null; d.targetRow = null;
         };
 
-        /* --- Mouse events --- */
+        /* Mouse events */
         grid.addEventListener('mousedown', e => {
             if (!this.editMode) return;
             const card = e.target.closest('.card');
             if (!card) return;
             if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown')) return;
-
             startDrag(e.clientX, e.clientY, card);
             e.preventDefault();
         });
-
-        document.addEventListener('mousemove', e => {
-            moveDrag(e.clientX, e.clientY);
-        });
-
+        document.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
         document.addEventListener('mouseup', endDrag);
 
-        /* --- Touch events --- */
+        /* Touch events */
         let touchStartTimer = null;
         let touchHandled = false;
-
         grid.addEventListener('touchstart', e => {
             if (!this.editMode) return;
             const card = e.target.closest('.card');
             if (!card) return;
             if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown')) return;
-
             const touch = e.touches[0];
             touchHandled = false;
-
-            /* Wait 300ms before starting a drag to distinguish from tap/scroll */
             touchStartTimer = setTimeout(() => {
                 touchHandled = true;
                 startDrag(touch.clientX, touch.clientY, card);
             }, 300);
         }, { passive: true });
-
         grid.addEventListener('touchmove', e => {
-            if (!d.active) {
-                /* If user starts scrolling before drag activates, cancel the drag */
-                clearTimeout(touchStartTimer);
-                return;
-            }
-
-            /* Prevent page scroll while dragging */
+            if (!d.active) { clearTimeout(touchStartTimer); return; }
             if (d.active) e.preventDefault();
-            const touch = e.touches[0];
-            moveDrag(touch.clientX, touch.clientY);
+            moveDrag(e.touches[0].clientX, e.touches[0].clientY);
         }, { passive: false });
-
-        grid.addEventListener('touchend', () => {
-            clearTimeout(touchStartTimer);
-            if (touchHandled) {
-                endDrag();
-                touchHandled = false;
-            }
-        });
-
-        grid.addEventListener('touchcancel', () => {
-            clearTimeout(touchStartTimer);
-            if (touchHandled) {
-                endDrag();
-                touchHandled = false;
-            }
-        });
+        grid.addEventListener('touchend', () => { clearTimeout(touchStartTimer); if (touchHandled) { endDrag(); touchHandled = false; } });
+        grid.addEventListener('touchcancel', () => { clearTimeout(touchStartTimer); if (touchHandled) { endDrag(); touchHandled = false; } });
     }
 
     /* Calculate grid column/row from absolute coordinates */
@@ -277,7 +237,7 @@ class HomepageApp {
         this.gridCols = cols;
 
         const gap = parseFloat(style.gap) || 16;
-        const paddingTop = 16;
+        const paddingTop = parseFloat(style.paddingTop) || parseFloat(style.padding) || 16;
         const cellH = Math.round(gridRect.height / Math.max(1, parseFloat(style.gridAutoRows) || 160));
 
         const usableWidth = gridRect.width - gap * (cols - 1);
@@ -291,13 +251,10 @@ class HomepageApp {
     _makeCursorIndicator() {
         const el = document.createElement('div');
         Object.assign(el.style, {
-            position: 'fixed',
-            border: '2px solid var(--accent)',
+            position: 'fixed', border: '2px solid var(--accent)',
             background: 'rgba(53, 132, 228, 0.1)',
             borderRadius: 'var(--radius-xl, 24px)',
-            pointerEvents: 'none',
-            zIndex: '9998',
-            transition: 'none'
+            pointerEvents: 'none', zIndex: '9998', transition: 'none'
         });
         return el;
     }
@@ -306,99 +263,73 @@ class HomepageApp {
     _resolveCollision(movedCard, newCol, newRow) {
         const [mw, mh] = (movedCard.size || '1x1').split('x').map(Number);
 
-        /* Build occupancy map excluding the moved card */
-        const occupied = new Map(); // "col,row" → card
+        const occupied = new Map();
         this.cards.forEach(c => {
             if (c.id === movedCard.id) return;
-            const gc = c.grid_col || 1;
-            const gr = c.grid_row || 1;
+            const gc = c.grid_col || 1, gr = c.grid_row || 1;
             const [cw, ch] = (c.size || '1x1').split('x').map(Number);
-            for (let cc = gc; cc < gc + cw; cc++) {
-                for (let cr = gr; cr < gr + ch; cr++) {
+            for (let cc = gc; cc < gc + cw; cc++)
+                for (let cr = gr; cr < gr + ch; cr++)
                     occupied.set(`${cc},${cr}`, c);
-                }
-            }
         });
 
-        /* Check if desired position is free */
-        let conflict = false;
-        let conflictCard = null;
+        let conflict = false, conflictCard = null;
         for (let cc = newCol; cc < newCol + mw; cc++) {
             for (let cr = newRow; cr < newRow + mh; cr++) {
                 const key = `${cc},${cr}`;
-                if (occupied.has(key)) {
-                    conflict = true;
-                    if (!conflictCard) conflictCard = occupied.get(key);
-                }
+                if (occupied.has(key)) { conflict = true; if (!conflictCard) conflictCard = occupied.get(key); }
             }
             if (conflict) break;
         }
 
         if (!conflict) return [newCol, newRow];
 
-        /* Conflict found — swap positions with the card we're landing on */
         if (conflictCard) {
-
-            /* Move conflict card to the old position of movedCard */
-            const oldCol = movedCard.grid_col || 1;
-            const oldRow = movedCard.grid_row || 1;
-
-            /* Check if old position is free for the conflict card */
+            const oldCol = movedCard.grid_col || 1, oldRow = movedCard.grid_row || 1;
             const [freeCol, freeRow] = this._findFreeSpot(conflictCard, oldCol, oldRow);
+
+            api.updateCard(conflictCard.id, { grid_col: freeCol, grid_row: freeRow }).catch(err => {
+                console.warn('[collision] Failed to reposition conflict card', conflictCard.id, err);
+            });
+
             conflictCard.grid_col = freeCol;
             conflictCard.grid_row = freeRow;
-
-            api.updateCard(conflictCard.id, { grid_col: freeCol, grid_row: freeRow }).catch(() => {});
-
             return [newCol, newRow];
         }
 
-        /* Fallback: scan nearby positions */
         return this._findFreeSpot(movedCard, newCol, newRow);
     }
 
     _findFreeSpot(card, wantCol, wantRow) {
         const [cw, ch] = (card.size || '1x1').split('x').map(Number);
-
-        /* Build occupancy map excluding this card */
         const occ = new Set();
         this.cards.forEach(c => {
             if (c.id === card.id) return;
-            const gc = c.grid_col || 1;
-            const gr = c.grid_row || 1;
+            const gc = c.grid_col || 1, gr = c.grid_row || 1;
             const [sc, sh] = (c.size || '1x1').split('x').map(Number);
-            for (let cc = gc; cc < gc + sc; cc++) {
-                for (let cr = gr; cr < gr + sh; cr++) {
+            for (let cc = gc; cc < gc + sc; cc++)
+                for (let cr = gr; cr < gr + sh; cr++)
                     occ.add(`${cc},${cr}`);
-                }
-            }
         });
 
-        /* Scan outward from wanted position */
         for (let offset = 0; offset < 200; offset++) {
             const candidates = offset === 0
                 ? [[wantCol, wantRow]]
-                : [
-                    [wantCol + offset, wantRow], [wantCol - offset, wantRow],
-                    [wantCol, wantRow + offset], [wantCol, wantRow - offset],
-                    [wantCol + offset, wantRow + offset], [wantCol - offset, wantRow - offset],
-                    [wantCol + offset, wantRow - offset], [wantCol - offset, wantRow + offset],
-                ];
+                : [[wantCol + offset, wantRow], [wantCol - offset, wantRow],
+                   [wantCol, wantRow + offset], [wantCol, wantRow - offset],
+                   [wantCol + offset, wantRow + offset], [wantCol - offset, wantRow - offset],
+                   [wantCol + offset, wantRow - offset], [wantCol - offset, wantRow + offset]];
 
             for (const [tc, tr] of candidates) {
                 if (tc < 1 || tr < 1) continue;
                 let ok = true;
-                for (let cc = tc; cc < tc + cw; cc++) {
-                    for (let cr = tr; cr < tr + ch; cr++) {
+                for (let cc = tc; cc < tc + cw; cc++)
+                    for (let cr = tr; cr < tr + ch; cr++)
                         if (occ.has(`${cc},${cr}`)) { ok = false; break; }
-                    }
                     if (!ok) break;
-                }
                 if (ok) return [tc, tr];
             }
         }
-
-        /* Absolute fallback */
         const maxRow = Math.max(...this.cards.map(c => c.grid_row || 1), 1);
         return [1, maxRow + 1];
     }
@@ -459,15 +390,13 @@ class HomepageApp {
             try {
                 const filename = this.settings.background_image;
                 const cleanName = filename.startsWith('/') ? filename.split('/').pop() : filename;
-                // Delete file — tolerate missing file (already gone)
                 try { await api.deleteImage(cleanName); } catch (e) { if (!e.message.includes('File not found')) throw e; }
                 this.settings.background_image = null;
                 const blur = parseInt(document.getElementById('blur-slider').value) || 0;
                 this.settings.blur_radius = blur;
                 await api.updateSettings({ background_image: null, blur_radius: blur });
                 Components.updateBackground(null, blur);
-                ph.style.display = 'flex';
-                prev.style.display = 'none';
+                ph.style.display = 'flex'; prev.style.display = 'none';
                 Components.showToast('Background removed');
             } catch (err) {
                 console.error('[bg-remove] error', err);
@@ -493,7 +422,6 @@ class HomepageApp {
             });
         });
 
-        /* icon URL input */
         iconUrl?.addEventListener('input', () => {
             const v = iconUrl.value.trim();
             if (v) {
@@ -504,7 +432,6 @@ class HomepageApp {
             }
         });
 
-        /* file upload */
         Components.initFileUpload(document.getElementById('icon-upload-area'), 'icon-file-input', async file => {
             try {
                 const r = await api.uploadImage(file);
@@ -523,11 +450,10 @@ class HomepageApp {
             if (iconUrl) iconUrl.value = '';
         });
 
-        /* fetch favicon */
         fetchBtn?.addEventListener('click', async () => {
             const u = url.value.trim();
             if (!u) { Components.showToast('Enter URL first', 'error'); return; }
-            fetchBtn.disabled = true; fetchBtn.textContent = '⏳';
+            fetchBtn.disabled = true; fetchBtn.textContent = 'Loading';
             try {
                 const r = await api.fetchIcon(u);
                 if (r.icon_path) {
@@ -539,10 +465,9 @@ class HomepageApp {
                     Components.showToast('Icon fetched');
                 } else Components.showToast('No icon found', 'error');
             } catch (_) { Components.showToast('Failed', 'error'); }
-            finally { fetchBtn.disabled = false; fetchBtn.textContent = '🔍'; }
+            finally { fetchBtn.disabled = false; fetchBtn.textContent = 'Fetch'; }
         });
 
-        /* save */
         save?.addEventListener('click', async () => {
             const t = title.value.trim();
             if (!t) { Components.showToast('Enter title', 'error'); return; }
@@ -559,7 +484,6 @@ class HomepageApp {
             } catch (e) { Components.showToast(e.message || 'Failed', 'error'); }
         });
 
-        /* delete */
         del?.addEventListener('click', async () => {
             if (this.editingCard && confirm('Delete?')) {
                 try { await api.deleteCard(this.editingCard.id); Components.hideModal('card-modal'); this._resetCardModal(); await this.loadCards(); Components.showToast('Deleted'); }
@@ -620,34 +544,46 @@ class HomepageApp {
             }, 300);
         });
 
-        sug?.addEventListener('click', e => { const i = e.target.closest('.suggestion-item'); if (i) { sug.classList.remove('show'); inp.value = i.dataset.q; window.open(this.searchUrl + encodeURIComponent(i.dataset.q), '_blank'); } });
-        inp?.addEventListener('keydown', e => { if (e.key === 'Enter') { const q = inp.value.trim(); sug.classList.remove('show'); if (q) window.open(this.searchUrl + encodeURIComponent(q), '_blank'); } else if (e.key === 'Escape') { sug.classList.remove('show'); inp.blur(); } });
+        sug?.addEventListener('click', e => {
+            const i = e.target.closest('.suggestion-item');
+            if (i) { sug.classList.remove('show'); inp.value = i.dataset.q; window.open(this.searchUrl + encodeURIComponent(i.dataset.q), '_blank', 'noopener,noreferrer'); }
+        });
+        inp?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { const q = inp.value.trim(); sug.classList.remove('show'); if (q) window.open(this.searchUrl + encodeURIComponent(q), '_blank', 'noopener,noreferrer'); }
+            else if (e.key === 'Escape') { sug.classList.remove('show'); inp.blur(); }
+        });
         inp?.addEventListener('blur', () => {
-            // Delay to allow suggestion-item clicks to fire before hiding
             setTimeout(() => { sug.classList.remove('show'); clearTimeout(this.searchTimeout); }, 150);
         });
-        document.getElementById('search-submit-btn')?.addEventListener('click', () => { const q = inp.value.trim(); if (q) window.open(this.searchUrl + encodeURIComponent(q), '_blank'); });
+        document.getElementById('search-submit-btn')?.addEventListener('click', () => { const q = inp.value.trim(); if (q) window.open(this.searchUrl + encodeURIComponent(q), '_blank', 'noopener,noreferrer'); });
 
         eng?.addEventListener('click', e => { e.stopPropagation(); dd.classList.toggle('show'); });
-        dd?.querySelectorAll('.search-engine-option').forEach(o => o.addEventListener('click', () => { this.searchEngine = o.dataset.engine; this.searchUrl = this._searchUrl(this.searchEngine); localStorage.setItem('searchEngine', this.searchEngine); this._updateEngineIcon(); dd.classList.remove('show'); }));
+        dd?.querySelectorAll('.search-engine-option').forEach(o => o.addEventListener('click', () => {
+            this.searchEngine = o.dataset.engine;
+            this.searchUrl = this._engineUrl(this.searchEngine);
+            localStorage.setItem('searchEngine', this.searchEngine);
+            this._updateEngineIcon();
+            dd.classList.remove('show');
+        }));
         document.addEventListener('click', e => { if (!e.target.closest('.search-engine-select') && !e.target.closest('.search-engine-dropdown')) dd?.classList.remove('show'); });
     }
 
     _esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
 
-    /* ==================== Data ==================== */
+    /* ==================== Data Loading ==================== */
     async loadData() {
         try {
             const d = await api.getFullData();
             this.settings = d.settings;
             this.cards = d.cards;
-
-            /* Auto-spread cards that overlap at the same position */
             this._autoSpreadCards();
-
             this._applySettings();
             this.renderCards();
-        } catch (_) { Components.showToast('Failed to load', 'error'); this.settings = { background_image:null, blur_radius:0, dark_mode:false }; this.cards = []; }
+        } catch (_) {
+            Components.showToast('Failed to load', 'error');
+            this.settings = { background_image: null, blur_radius: 0, dark_mode: false };
+            this.cards = [];
+        }
     }
 
     async _autoSpreadCards() {
@@ -655,19 +591,16 @@ class HomepageApp {
         const occupied = new Set();
         const toSpread = [];
 
-        /* Find overlapping cards — process in order */
         this.cards.forEach(c => {
             const key = `${c.grid_col || 1},${c.grid_row || 1}`;
-            if (occupied.has(key)) {
-                toSpread.push(c);
-            } else {
-                occupied.add(key);
-            }
+            if (occupied.has(key)) { toSpread.push(c); }
+            else { occupied.add(key); }
         });
 
         if (toSpread.length === 0) return;
 
-        /* Find free cells and spread */
+        let successCount = 0, failCount = 0;
+
         for (const card of toSpread) {
             let placed = false;
             for (let row = 1; row < 100 && !placed; row++) {
@@ -675,24 +608,39 @@ class HomepageApp {
                     const key = `${col},${row}`;
                     if (!occupied.has(key)) {
                         occupied.add(key);
-                        card.grid_col = col;
-                        card.grid_row = row;
-                        placed = true;
                         try {
                             await api.updateCard(card.id, { grid_col: col, grid_row: row });
-                        } catch (_) {}
+                            card.grid_col = col;
+                            card.grid_row = row;
+                            successCount++;
+                            placed = true;
+                        } catch (err) {
+                            console.error('[auto-spread] failed', card.id, err);
+                            failCount++;
+                        }
                     }
                 }
             }
         }
 
-        Components.showToast(`Spread ${toSpread.length} overlapping cards`);
+        if (failCount > 0) {
+            Components.showToast(`Spread ${successCount} of ${toSpread.length} overlapping cards (${failCount} failed)`, 'error');
+        } else {
+            Components.showToast(`Spread ${successCount} overlapping cards`);
+        }
     }
 
     _applySettings() {
-        Components.updateBackground(this.settings.background_image ? '/api/uploads/' + this.settings.background_image : null, this.settings.blur_radius || 0);
-        const s = document.getElementById('blur-slider'); if (s) { s.value = this.settings.blur_radius || 0; document.getElementById('blur-value').textContent = (this.settings.blur_radius || 0) + 'px'; }
-        if (this.settings.background_image) { const p = document.getElementById('bg-upload-preview'); const h = document.getElementById('bg-upload-placeholder'); const i = document.getElementById('bg-preview-img'); if (p && h && i) { i.src = '/api/uploads/' + this.settings.background_image; h.style.display = 'none'; p.style.display = 'block'; } }
+        const bgUrl = this.settings.background_image ? Components.resolveIconUrl(this.settings.background_image) : null;
+        Components.updateBackground(bgUrl, this.settings.blur_radius || 0);
+        const s = document.getElementById('blur-slider');
+        if (s) { s.value = this.settings.blur_radius || 0; document.getElementById('blur-value').textContent = (this.settings.blur_radius || 0) + 'px'; }
+        if (this.settings.background_image) {
+            const p = document.getElementById('bg-upload-preview');
+            const h = document.getElementById('bg-upload-placeholder');
+            const i = document.getElementById('bg-preview-img');
+            if (p && h && i) { i.src = '/api/uploads/' + this.settings.background_image; h.style.display = 'none'; p.style.display = 'block'; }
+        }
         Components.setTheme(this.settings.dark_mode ? 'dark' : 'light');
     }
 
@@ -715,17 +663,21 @@ class HomepageApp {
         document.getElementById('card-grid-row').value = card.grid_row || 1;
         const iconUrl = document.getElementById('card-icon-url');
         if (card.icon_path) {
-            const ext = card.icon_path.startsWith('http');
-            document.getElementById('icon-preview-img').src = ext ? card.icon_path : '/api/uploads/' + card.icon_path;
+            const iconSrc = Components.resolveIconUrl(card.icon_path);
+            document.getElementById('icon-preview-img').src = iconSrc;
             document.getElementById('icon-upload-placeholder').style.display = 'none';
             document.getElementById('icon-upload-preview').style.display = 'block';
-            if (iconUrl) iconUrl.value = ext ? card.icon_path : '';
-        } else { document.getElementById('icon-upload-placeholder').style.display = 'flex'; document.getElementById('icon-upload-preview').style.display = 'none'; if (iconUrl) iconUrl.value = ''; }
+            if (iconUrl) iconUrl.value = card.icon_path.startsWith('http') ? card.icon_path : '';
+        } else {
+            document.getElementById('icon-upload-placeholder').style.display = 'flex';
+            document.getElementById('icon-upload-preview').style.display = 'none';
+            if (iconUrl) iconUrl.value = '';
+        }
         Components.showModal('card-modal');
     }
 
-    async _saveBlur() { try { const v = parseInt(document.getElementById('blur-slider').value); await api.updateSettings({ blur_radius: v }); this.settings.blur_radius = v; } catch (_) {} }
-    async _saveTheme(t) { try { await api.updateSettings({ dark_mode: t === 'dark' }); this.settings.dark_mode = t === 'dark'; } catch (_) {} }
+    async _saveBlur() { try { const v = parseInt(document.getElementById('blur-slider').value); await api.updateSettings({ blur_radius: v }); this.settings.blur_radius = v; } catch (_) { console.error('[save-blur] failed', _); } }
+    async _saveTheme(t) { try { await api.updateSettings({ dark_mode: t === 'dark' }); this.settings.dark_mode = t === 'dark'; } catch (_) { console.error('[save-theme] failed', _); } }
 
     _export() {
         const b = new Blob([JSON.stringify({ settings: this.settings, cards: this.cards, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
@@ -738,10 +690,10 @@ class HomepageApp {
         try {
             const d = JSON.parse(await file.text());
             if (!d.settings || !d.cards) throw new Error('Invalid');
-            await api.updateSettings(d.settings);
-            for (const c of this.cards) await api.deleteCard(c.id);
-            for (const c of d.cards) await api.createCard({ title: c.title, url: c.url, icon_path: c.icon_path, size: c.size || '1x1', grid_col: c.grid_col || 1, grid_row: c.grid_row || 1 });
-            Components.showToast('Imported'); await this.loadData();
+            /* Use transactional import endpoint if available */
+            await api.request('/import', { method: 'POST', body: JSON.stringify({ settings: d.settings, cards: d.cards }) });
+            Components.showToast('Imported');
+            await this.loadData();
         } catch (_) { Components.showToast('Import failed', 'error'); }
         document.getElementById('import-file-input').value = '';
     }

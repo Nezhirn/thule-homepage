@@ -1611,10 +1611,6 @@ body.edit-mode .btn-add-card-fab {
     animation: slideUp 0.3s ease-out;
 }
 
-.tab {
-    animation: fadeIn 0.2s ease-out;
-}
-
 /* Loading state */
 .loading {
     opacity: 0.6;
