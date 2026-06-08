@@ -185,6 +185,14 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Open Mode</label>
+                    <div class="toggle-group" id="open-mode-selector">
+                        <button type="button" class="btn btn-toggle active" id="open-mode-new" data-new-tab="true">New tab</button>
+                        <button type="button" class="btn btn-toggle" id="open-mode-same" data-new-tab="false">Same tab</button>
+                    </div>
+                    <input type="hidden" id="card-new-tab" value="true">
+                </div>
+                <div class="form-group">
                     <label class="form-label">Icon/Image</label>
                     <div class="form-group" style="margin-bottom: var(--space-sm);">
                         <label class="form-label" style="font-size: 12px; color: var(--text-secondary);">Icon URL</label>

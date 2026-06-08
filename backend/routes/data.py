@@ -123,8 +123,8 @@ async def import_data(data: ImportData):
             position = (row_num - 1) * 7 + (col - 1)  # COLS_PER_ROW = 7
 
             cursor.execute(
-                "INSERT INTO cards (title, url, icon_path, size, position, grid_col, grid_row) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (card.title, safe_url, safe_icon, card.size, position, col, row_num)
+                "INSERT INTO cards (title, url, icon_path, size, position, grid_col, grid_row, open_in_new_tab) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (card.title, safe_url, safe_icon, card.size, position, col, row_num, int(getattr(card, "open_in_new_tab", True)))
             )
 
         conn.commit()

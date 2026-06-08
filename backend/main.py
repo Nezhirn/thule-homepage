@@ -52,6 +52,26 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def cache_control_middleware(request, call_next):
+    """Set sensible Cache-Control headers for static frontend assets.
+
+    - /css, /js: cache for an hour but revalidate (filenames are not hashed).
+    - / (index.html): never cache, so new frontend versions are picked up.
+    Routes that set their own Cache-Control (e.g. /api/uploads) are left untouched.
+    """
+    response = await call_next(request)
+    path = request.url.path
+    # Only cache successful responses, and never override a header the route
+    # already set (e.g. /api/uploads sets its own immutable Cache-Control).
+    if 200 <= response.status_code < 300 and "cache-control" not in response.headers:
+        if path.startswith("/css/") or path.startswith("/js/"):
+            response.headers["Cache-Control"] = "public, max-age=3600"
+        elif path == "/":
+            response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ==================== Frontend Serving ====================
 
 @app.get("/", response_class=HTMLResponse)
