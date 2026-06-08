@@ -38,12 +38,14 @@ volumes:
 ## Features
 
 - **Card Grid** — customizable cards with icons, URLs, and sizes (1×1, 2×1, 1×2, 2×2)
+- **Open Mode** — per-card choice to open the link in a new tab or the same tab
 - **Drag-and-Drop** — reorder cards via drag & drop
 - **Search** — built-in search bar with autocomplete (Google, DuckDuckGo, Bing, Yandex)
 - **Background Images** — upload with drag-and-drop, blur control
 - **Light/Dark Theme** — toggle with persistence
 - **Import/Export** — backup all data to JSON
 - **Auto Favicon** — automatic icon fetching from websites (with SSRF protection)
+- **Asset Caching** — icons & static assets served with `Cache-Control` (no more re-downloading icons on every load)
 - **Responsive** — desktop, tablet, and mobile support
 
 ## Architecture
@@ -95,6 +97,14 @@ Response: `{"status": "healthy", "version": "1.0.0"}`
 | `GET` | `/api/full-data` | Get settings + cards |
 | `POST` | `/api/upload` | Upload image |
 | `POST` | `/api/fetch-icon` | Fetch favicon from URL |
+
+## Tags
+
+| Tag | Description |
+|-----|-------------|
+| `latest` | Latest stable build |
+| `1.1.0` | Per-card open mode, asset caching, frontend stability fixes |
+| `1.0.0` | Initial release |
 
 ## Source Code
 
