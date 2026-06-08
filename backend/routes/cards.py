@@ -63,8 +63,8 @@ async def create_card(card_create: CardCreate):
         new_position = (row - 1) * COLS_PER_ROW + (col - 1)
 
         cursor.execute(
-            "INSERT INTO cards (title, url, icon_path, size, position, grid_col, grid_row) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (card_create.title, safe_url, safe_icon, card_create.size, new_position, col, row)
+            "INSERT INTO cards (title, url, icon_path, size, position, grid_col, grid_row, open_in_new_tab) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (card_create.title, safe_url, safe_icon, card_create.size, new_position, col, row, int(card_create.open_in_new_tab))
         )
         conn.commit()
         card_id = cursor.lastrowid
@@ -78,6 +78,7 @@ async def create_card(card_create: CardCreate):
             position=new_position,
             grid_col=col,
             grid_row=row,
+            open_in_new_tab=card_create.open_in_new_tab,
         )
     finally:
         conn.close()
@@ -133,6 +134,10 @@ async def update_card(card_id: int, card_update: CardUpdate):
         if card_update.grid_row is not None:
             updates.append("grid_row = ?")
             values.append(card_update.grid_row)
+
+        if card_update.open_in_new_tab is not None:
+            updates.append("open_in_new_tab = ?")
+            values.append(int(card_update.open_in_new_tab))
 
         if updates:
             values.append(card_id)

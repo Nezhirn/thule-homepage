@@ -4,13 +4,19 @@
 
 const Components = {
 
-    card(card, onEdit, editMode, cols) {
-        const el = document.createElement('div');
-        el.className = 'card';
-        el.dataset.id = card.id;
-        el.dataset.size = card.size || '1x1';
+    /** Build a content signature; if unchanged between renders, the DOM node
+     *  is reused (only grid position is updated), so <img> icons are not
+     *  recreated and therefore not re-fetched by the browser. */
+    _cardSignature(card, editMode) {
+        return [
+            card.id, card.title, card.url || '', card.icon_path || '',
+            card.size || '1x1', card.open_in_new_tab === false ? 0 : 1,
+            editMode ? 1 : 0,
+        ].join('|');
+    },
 
-        /* explicit grid position from data */
+    /** Apply grid placement (cheap; safe to call every render). */
+    _applyCardPosition(el, card) {
         const gCol = card.grid_col != null ? card.grid_col : 1;
         const gRow = card.grid_row != null ? card.grid_row : 1;
         const [cs, rs] = (card.size || '1x1').split('x').map(Number);
@@ -18,6 +24,17 @@ const Components = {
         el.style.gridRowEnd = `span ${rs}`;
         el.style.gridColumnStart = gCol;
         el.style.gridColumnEnd = `span ${cs}`;
+    },
+
+    card(card, onEdit, editMode, cols) {
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.dataset.id = card.id;
+        el.dataset.size = card.size || '1x1';
+        el.dataset.sig = Components._cardSignature(card, editMode);
+
+        /* explicit grid position from data */
+        Components._applyCardPosition(el, card);
 
         if (editMode) {
             const mb = document.createElement('button');
@@ -57,10 +74,20 @@ const Components = {
 
         if (card.url && !editMode) {
             el.style.cursor = 'pointer';
-            el.addEventListener('click', () => window.open(card.url, '_blank', 'noopener,noreferrer'));
+            el.addEventListener('click', () => Components.openCardUrl(card));
         }
 
         return el;
+    },
+
+    /** Open a card's URL respecting its open_in_new_tab preference. */
+    openCardUrl(card) {
+        if (!card.url) return;
+        if (card.open_in_new_tab === false) {
+            window.location.href = card.url;
+        } else {
+            window.open(card.url, '_blank', 'noopener,noreferrer');
+        }
     },
 
     _dropdown(card, onEdit) {
@@ -97,41 +124,102 @@ const Components = {
         return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>';
     },
 
+    /**
+     * Reconciling renderer. Reuses existing card DOM nodes whose content
+     * signature is unchanged (only repositioning them), so favicon <img>
+     * elements are not recreated and the browser does not re-fetch them on
+     * every render (resize, drag, edit-mode is the only full rebuild trigger).
+     */
     renderCards(cards, container, onEdit, editMode, cols = 7) {
-        container.innerHTML = '';
+        /* Empty state */
         if (cards.length === 0) {
             container.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg><p>No cards yet</p><span style="font-size:14px;opacity:0.7">Click the + button to add your first card</span></div>';
             return;
         }
-        cards.forEach((c, i) => {
-            const el = Components.card(c, onEdit, editMode, cols);
-            el.style.animationDelay = (i * 50) + 'ms';
-            container.appendChild(el);
+
+        /* If an empty-state placeholder is present, clear it before reconciling */
+        const empty = container.querySelector('.empty-state');
+        if (empty) empty.remove();
+
+        /* Close any open card menu — node reuse would otherwise leave it orphaned
+         * (the old full-rebuild path dropped these implicitly). */
+        container.querySelectorAll('.card-dropdown').forEach(d => d.remove());
+
+        /* Index existing card nodes by id */
+        const existing = new Map();
+        container.querySelectorAll(':scope > .card').forEach(el => {
+            existing.set(el.dataset.id, el);
         });
 
-        /* Render grid cell placeholders in edit mode — ALL visible cells */
-        if (editMode) {
-            const maxCol = cols;
-            const maxRow = Math.max(...cards.map(c => {
-                const gr = c.grid_row || 1;
-                const [, ch] = (c.size || '1x1').split('x').map(Number);
-                return gr + ch - 1;
-            }), 3);
+        const keepIds = new Set();
+        let newCount = 0;
 
-            for (let r = 1; r <= maxRow; r++) {
-                for (let c = 1; c <= maxCol; c++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'grid-cell';
-                    cell.style.gridColumnStart = c;
-                    cell.style.gridColumnEnd = c + 1;
-                    cell.style.gridRowStart = r;
-                    cell.style.gridRowEnd = r + 1;
-                    cell.dataset.col = c;
-                    cell.dataset.row = r;
-                    container.appendChild(cell);
-                }
+        cards.forEach(c => {
+            const id = String(c.id);
+            keepIds.add(id);
+            const sig = Components._cardSignature(c, editMode);
+            const prev = existing.get(id);
+
+            if (prev && prev.dataset.sig === sig) {
+                /* Reuse node as-is; only refresh placement */
+                Components._applyCardPosition(prev, c);
+                prev.style.animationDelay = '';
+            } else {
+                /* Build (or rebuild) this card */
+                const el = Components.card(c, onEdit, editMode, cols);
+                el.style.animationDelay = (newCount++ * 50) + 'ms';
+                if (prev) container.replaceChild(el, prev);
+                else container.appendChild(el);
+            }
+        });
+
+        /* Remove card nodes for cards that no longer exist */
+        existing.forEach((el, id) => {
+            if (!keepIds.has(id)) el.remove();
+        });
+
+        Components._renderGridCells(cards, container, editMode, cols);
+    },
+
+    /** Render/refresh the edit-mode grid-cell placeholder layer.
+     *  Rebuilt only when its target geometry (editMode + maxRow + cols) changes. */
+    _renderGridCells(cards, container, editMode, cols) {
+        if (!editMode) {
+            container.querySelectorAll(':scope > .grid-cell').forEach(c => c.remove());
+            delete container.dataset.cellGeom;
+            return;
+        }
+
+        const maxCol = cols;
+        const maxRow = Math.max(...cards.map(c => {
+            const gr = c.grid_row || 1;
+            const [, ch] = (c.size || '1x1').split('x').map(Number);
+            return gr + ch - 1;
+        }), 3);
+
+        const geom = `${maxCol}x${maxRow}`;
+        if (container.dataset.cellGeom === geom &&
+            container.querySelector(':scope > .grid-cell')) {
+            return; // geometry unchanged — keep existing cells
+        }
+
+        container.querySelectorAll(':scope > .grid-cell').forEach(c => c.remove());
+        const frag = document.createDocumentFragment();
+        for (let r = 1; r <= maxRow; r++) {
+            for (let c = 1; c <= maxCol; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                cell.style.gridColumnStart = c;
+                cell.style.gridColumnEnd = c + 1;
+                cell.style.gridRowStart = r;
+                cell.style.gridRowEnd = r + 1;
+                cell.dataset.col = c;
+                cell.dataset.row = r;
+                frag.appendChild(cell);
             }
         }
+        container.appendChild(frag);
+        container.dataset.cellGeom = geom;
     },
 
     updateBackground(imageUrl, blurRadius) {

@@ -48,7 +48,8 @@ def init_db():
                 size TEXT DEFAULT '1x1',
                 position INTEGER DEFAULT 0,
                 grid_col INTEGER DEFAULT 1,
-                grid_row INTEGER DEFAULT 1
+                grid_row INTEGER DEFAULT 1,
+                open_in_new_tab INTEGER DEFAULT 1
             )
         """)
     else:
@@ -68,18 +69,25 @@ def init_db():
                     size TEXT DEFAULT '1x1',
                     position INTEGER DEFAULT 0,
                     grid_col INTEGER DEFAULT 1,
-                    grid_row INTEGER DEFAULT 1
+                    grid_row INTEGER DEFAULT 1,
+                    open_in_new_tab INTEGER DEFAULT 1
                 )
             """)
             cursor.execute("INSERT INTO cards_new (id, title, url, icon_path, size, position) SELECT id, title, url, icon_path, size, position FROM cards")
             cursor.execute("DROP TABLE cards")
             cursor.execute("ALTER TABLE cards_new RENAME TO cards")
-        elif "grid_col" not in cards_columns or "grid_row" not in cards_columns:
-            # Add grid columns
+        else:
+            # Add grid columns if missing
             if "grid_col" not in cards_columns:
                 cursor.execute("ALTER TABLE cards ADD COLUMN grid_col INTEGER DEFAULT 1")
             if "grid_row" not in cards_columns:
                 cursor.execute("ALTER TABLE cards ADD COLUMN grid_row INTEGER DEFAULT 1")
+
+        # Add open_in_new_tab column if missing (re-read columns in case table was rebuilt above)
+        cursor.execute("PRAGMA table_info(cards)")
+        cards_columns = {row[1] for row in cursor.fetchall()}
+        if "open_in_new_tab" not in cards_columns:
+            cursor.execute("ALTER TABLE cards ADD COLUMN open_in_new_tab INTEGER DEFAULT 1")
 
     # Add index for grid-based queries if not exists
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_cards_grid ON cards (grid_row, grid_col)")

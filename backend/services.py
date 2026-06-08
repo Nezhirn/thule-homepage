@@ -210,6 +210,11 @@ async def fetch_favicon(page_url: str) -> Optional[str]:
 
 def row_to_card(row) -> CardResponse:
     """Convert a database row to a CardResponse."""
+    # row["open_in_new_tab"] may not exist on very old rows; default to True
+    try:
+        new_tab = row["open_in_new_tab"]
+    except (IndexError, KeyError):
+        new_tab = None
     return CardResponse(
         id=row["id"],
         title=row["title"],
@@ -219,4 +224,5 @@ def row_to_card(row) -> CardResponse:
         position=row["position"],
         grid_col=row["grid_col"] if row["grid_col"] is not None else 1,
         grid_row=row["grid_row"] if row["grid_row"] is not None else 1,
+        open_in_new_tab=bool(new_tab) if new_tab is not None else True,
     )

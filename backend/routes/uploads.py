@@ -28,7 +28,12 @@ async def serve_uploaded_file(filename: str):
     filepath = os.path.join(UPLOADS_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(filepath)
+    # Uploaded files have unique uuid names and never change content,
+    # so they can be cached aggressively (1 year, immutable).
+    return FileResponse(
+        filepath,
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 @router.delete("/upload/{filename}")

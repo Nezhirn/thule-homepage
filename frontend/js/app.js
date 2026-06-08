@@ -92,6 +92,7 @@ class HomepageApp {
 
         const startDrag = (clientX, clientY, card) => {
             if (!this.editMode) return;
+            cancelPendingMove();
             const rect = card.getBoundingClientRect();
             d.active = true; d.card = card;
             d.sx = clientX; d.sy = clientY;
@@ -108,6 +109,25 @@ class HomepageApp {
             });
             document.body.appendChild(d.ghost);
             card.style.opacity = '0.3';
+        };
+
+        /* rAF-throttled wrapper: collapse a burst of pointer moves into one
+         * update per frame so heavy work (elementFromPoint + DOM scans) runs
+         * at most ~60fps instead of on every mousemove/touchmove event. */
+        const requestMove = (clientX, clientY) => {
+            d._lastX = clientX; d._lastY = clientY;
+            if (d._rafId != null) return;
+            d._rafId = requestAnimationFrame(() => {
+                d._rafId = null;
+                moveDrag(d._lastX, d._lastY);
+            });
+        };
+
+        /* Drop any frame still queued — prevents a stale move from firing after
+         * the drag ends (which would re-show the hidden ghost during endDrag's
+         * await) or bleeding into the next drag with old coordinates. */
+        const cancelPendingMove = () => {
+            if (d._rafId != null) { cancelAnimationFrame(d._rafId); d._rafId = null; }
         };
 
         const moveDrag = (clientX, clientY) => {
@@ -160,6 +180,7 @@ class HomepageApp {
 
         const endDrag = async () => {
             if (!d.active) return;
+            cancelPendingMove();
 
             if (d.ghost) {
                 d.ghost.style.display = 'none';
@@ -201,7 +222,7 @@ class HomepageApp {
             startDrag(e.clientX, e.clientY, card);
             e.preventDefault();
         });
-        document.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+        document.addEventListener('mousemove', e => requestMove(e.clientX, e.clientY));
         document.addEventListener('mouseup', endDrag);
 
         /* Touch events */
@@ -222,7 +243,7 @@ class HomepageApp {
         grid.addEventListener('touchmove', e => {
             if (!d.active) { clearTimeout(touchStartTimer); return; }
             if (d.active) e.preventDefault();
-            moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+            requestMove(e.touches[0].clientX, e.touches[0].clientY);
         }, { passive: false });
         grid.addEventListener('touchend', () => { clearTimeout(touchStartTimer); if (touchHandled) { endDrag(); touchHandled = false; } });
         grid.addEventListener('touchcancel', () => { clearTimeout(touchStartTimer); if (touchHandled) { endDrag(); touchHandled = false; } });
@@ -422,6 +443,15 @@ class HomepageApp {
             });
         });
 
+        /* Open mode toggle (new tab vs same tab) */
+        document.querySelectorAll('#open-mode-selector .btn-toggle').forEach(b => {
+            b.addEventListener('click', () => {
+                document.querySelectorAll('#open-mode-selector .btn-toggle').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                document.getElementById('card-new-tab').value = b.dataset.newTab;
+            });
+        });
+
         iconUrl?.addEventListener('input', () => {
             const v = iconUrl.value.trim();
             if (v) {
@@ -474,7 +504,8 @@ class HomepageApp {
             const cu = iconUrl?.value.trim();
             const gCol = parseInt(document.getElementById('card-grid-col').value) || 1;
             const gRow = parseInt(document.getElementById('card-grid-row').value) || 1;
-            const data = { title: t, url: url.value.trim() || null, size, icon_path: cu || iconFile || null, grid_col: gCol, grid_row: gRow };
+            const openInNewTab = document.getElementById('card-new-tab').value !== 'false';
+            const data = { title: t, url: url.value.trim() || null, size, icon_path: cu || iconFile || null, grid_col: gCol, grid_row: gRow, open_in_new_tab: openInNewTab };
             try {
                 if (this.editingCard) { await api.updateCard(this.editingCard.id, data); Components.showToast('Updated'); }
                 else { await api.createCard(data); Components.showToast('Created'); }
@@ -492,6 +523,18 @@ class HomepageApp {
         });
     }
 
+    /* Sync the open-mode toggle UI + hidden input to a boolean */
+    _setOpenMode(newTab) {
+        const val = newTab !== false;
+        document.getElementById('card-new-tab').value = val ? 'true' : 'false';
+        const nb = document.getElementById('open-mode-new');
+        const sb = document.getElementById('open-mode-same');
+        if (nb && sb) {
+            nb.classList.toggle('active', val);
+            sb.classList.toggle('active', !val);
+        }
+    }
+
     _resetCardModal() {
         document.getElementById('card-id').value = '';
         document.getElementById('card-title').value = '';
@@ -500,6 +543,7 @@ class HomepageApp {
         if (iconUrl) iconUrl.value = '';
         document.getElementById('card-grid-col').value = 1;
         document.getElementById('card-grid-row').value = 1;
+        this._setOpenMode(true);
         document.getElementById('card-delete-btn').style.display = 'none';
         document.getElementById('card-modal-title').textContent = 'Add Card';
         this.editingCard = null;
@@ -521,8 +565,20 @@ class HomepageApp {
 
     async _suggestions(q) {
         if (q.length < 2) return [];
-        try { const r = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=8&format=json&origin=*`); const d = await r.json(); return d[1] || []; }
-        catch { return []; }
+        /* Cancel any in-flight suggestion request to avoid races / piled-up promises */
+        if (this._suggestController) this._suggestController.abort();
+        const controller = new AbortController();
+        this._suggestController = controller;
+        try {
+            const r = await fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=8&format=json&origin=*`, { signal: controller.signal });
+            const d = await r.json();
+            return d[1] || [];
+        } catch (e) {
+            if (e.name === 'AbortError') return null; // superseded — caller ignores
+            return [];
+        } finally {
+            if (this._suggestController === controller) this._suggestController = null;
+        }
     }
 
     _setupSearch() {
@@ -537,6 +593,7 @@ class HomepageApp {
             clearTimeout(this.searchTimeout);
             this.searchTimeout = setTimeout(async () => {
                 const res = await this._suggestions(q);
+                if (res === null) return; // request was superseded; leave UI untouched
                 if (res.length) {
                     sug.innerHTML = res.map(r => `<div class="suggestion-item" data-q="${this._esc(r)}"><span class="suggestion-text">${this._esc(r)}</span></div>`).join('');
                     sug.classList.add('show');
@@ -576,6 +633,7 @@ class HomepageApp {
             const d = await api.getFullData();
             this.settings = d.settings;
             this.cards = d.cards;
+            /* Resolve overlaps locally, render immediately, persist in background */
             this._autoSpreadCards();
             this._applySettings();
             this.renderCards();
@@ -586,7 +644,13 @@ class HomepageApp {
         }
     }
 
-    async _autoSpreadCards() {
+    /**
+     * Resolve cards that share a grid cell. Computes new positions synchronously
+     * (no network round-trips on the critical path), updates local state so the
+     * first render is already correct, then persists the moves concurrently in
+     * the background — start-up never blocks on the server.
+     */
+    _autoSpreadCards() {
         const cols = this.gridCols;
         const occupied = new Set();
         const toSpread = [];
@@ -599,8 +663,7 @@ class HomepageApp {
 
         if (toSpread.length === 0) return;
 
-        let successCount = 0, failCount = 0;
-
+        const moves = [];
         for (const card of toSpread) {
             let placed = false;
             for (let row = 1; row < 100 && !placed; row++) {
@@ -608,23 +671,36 @@ class HomepageApp {
                     const key = `${col},${row}`;
                     if (!occupied.has(key)) {
                         occupied.add(key);
-                        try {
-                            await api.updateCard(card.id, { grid_col: col, grid_row: row });
-                            card.grid_col = col;
-                            card.grid_row = row;
-                            successCount++;
-                            placed = true;
-                        } catch (err) {
-                            console.error('[auto-spread] failed', card.id, err);
-                            failCount++;
-                        }
+                        card.grid_col = col;
+                        card.grid_row = row;
+                        moves.push({ id: card.id, col, row });
+                        placed = true;
                     }
                 }
             }
         }
 
+        if (moves.length === 0) return;
+
+        /* Persist in the background; do not block startup or rendering */
+        this._persistMoves(moves);
+    }
+
+    async _persistMoves(moves) {
+        const results = await Promise.allSettled(
+            moves.map(m => api.updateCard(m.id, { grid_col: m.col, grid_row: m.row }))
+        );
+        const failCount = results.filter(r => r.status === 'rejected').length;
+        const successCount = results.length - failCount;
         if (failCount > 0) {
-            Components.showToast(`Spread ${successCount} of ${toSpread.length} overlapping cards (${failCount} failed)`, 'error');
+            results.forEach((r, i) => { if (r.status === 'rejected') console.error('[auto-spread] failed', moves[i].id, r.reason); });
+            Components.showToast(`Spread ${successCount} of ${moves.length} overlapping cards (${failCount} failed)`, 'error');
+            /* Some moves were not persisted — resync local state with the server
+             * so the optimistic layout doesn't diverge from what's stored. */
+            try {
+                this.cards = await api.getCards();
+                this.renderCards();
+            } catch (_) { /* leave optimistic state if reload also fails */ }
         } else {
             Components.showToast(`Spread ${successCount} overlapping cards`);
         }
@@ -661,6 +737,7 @@ class HomepageApp {
         document.querySelectorAll('#size-selector .size-btn').forEach(b => b.classList.toggle('active', b.dataset.size === (card.size || '1x1')));
         document.getElementById('card-grid-col').value = card.grid_col || 1;
         document.getElementById('card-grid-row').value = card.grid_row || 1;
+        this._setOpenMode(card.open_in_new_tab !== false);
         const iconUrl = document.getElementById('card-icon-url');
         if (card.icon_path) {
             const iconSrc = Components.resolveIconUrl(card.icon_path);

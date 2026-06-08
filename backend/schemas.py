@@ -25,6 +25,7 @@ class CardCreate(BaseModel):
     size: str = "1x1"
     grid_col: int = 1
     grid_row: int = 1
+    open_in_new_tab: bool = True
 
     @field_validator("size")
     @classmethod
@@ -42,6 +43,7 @@ class CardUpdate(BaseModel):
     position: Optional[int] = None
     grid_col: Optional[int] = None
     grid_row: Optional[int] = None
+    open_in_new_tab: Optional[bool] = None
 
     @field_validator("size")
     @classmethod
@@ -60,6 +62,7 @@ class CardResponse(BaseModel):
     position: int
     grid_col: int
     grid_row: int
+    open_in_new_tab: bool = True
 
 
 class CardsReorderRequest(BaseModel):
