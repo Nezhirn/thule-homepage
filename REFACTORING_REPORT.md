@@ -1,8 +1,8 @@
 # Итоговый отчёт о рефакторинге thule-homepage
 
-**Дата:** 2026-09-10 · **Коммит:** `1c4d1c9` · **Версия приложения:** 1.2.1
+**Дата:** 2026-09-10 · **Коммиты:** `1c4d1c9` (код), `3f4f0aa` (этот отчёт и `CODE_REVIEW.md`) · **Версия приложения:** 1.2.1
 **Образ:** `thuleseeker/thule:latest` = `thuleseeker/thule:1.2.1` (`sha256:881eb235e72b57fa3bd5b2594c05d73e61b00dd964bf8798609a0f05fb4f87d8`)
-**Объём:** 48 файлов, +5486/−1156
+**Объём:** 48 файлов, +5486/−1156 (код); +931 (документация в `3f4f0aa`)
 
 Работа выполнена по `CODE_REVIEW.md` (7 Critical, 22 High, 40 Medium, ~40 Low).
 Каждая находка проверена по коду; несогласные рекомендации отклонены с обоснованием (см. §4).
@@ -11,9 +11,9 @@
 
 ## 1. Резюме
 
-- Закрыты все Critical и High: удалён открытый CORS, добавлена аутентификация, устранены
+- Закрыты Critical и High: удалён открытый CORS, добавлена аутентификация, устранены
   произвольное удаление файлов, потеря обоев/иконок при частичном обновлении, SSRF, stored XSS
-  и разрушительный импорт.
+  и разрушительный импорт. Аутентификация опциональна, поэтому **C1 закрыт условно** (см. §3, §7).
 - Данные теперь защищены единым invariant: файлы удаляются только после успешного commit БД и
   только если на них никто не ссылается; миграции транзакционные и восстанавливаются после сбоя.
 - Появился тестовый контур: **80 backend-тестов** (pytest) и **26 frontend-тестов** (vitest + jsdom),
@@ -33,7 +33,7 @@
 |-----|-----|
 | `CORSMiddleware` удалён полностью | `backend/main.py` |
 | Опциональная токен-аутентификация `AUTH_TOKEN`: header `X-Auth-Token`/`Bearer` на все `/api/*` кроме `GET /api/health`; HttpOnly+SameSite=Strict cookie для `<img>`; мутации только по header | `backend/auth.py` |
-| Security-заголовки: CSP, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy` | `backend/main.py` |
+| Security-заголовки: CSP, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`; middleware зарегистрирован внешним, поэтому заголовки есть и на ранних 401 | `backend/main.py`, `tests/test_auth.py` |
 | Rate limit 20/мин на `POST /api/fetch-icon` | `backend/ratelimit.py` |
 | Порт по умолчанию привязан к `127.0.0.1` | `docker-compose.yml`, README |
 
@@ -53,8 +53,10 @@
 ### 2.3 База данных
 
 - WAL + `busy_timeout=30s` + `timeout=30` + `synchronous=NORMAL` (`database.py`).
-- Транзакционные идемпотентные миграции с `PRAGMA user_version`; восстановление прерванного
-  rebuild (`cards_new`) без потери данных; `DROP TABLE IF EXISTS` больше не нужен.
+- Транзакционные идемпотентные миграции; `PRAGMA user_version` выставляется как метка текущей
+  ревизии (`SCHEMA_VERSION`), но чтением версии шаги не гейтятся — они идемпотентно выполняются при
+  каждом старте. Это сознательный выбор: идемпотентный прогон надёжнее забытого bump'а версии.
+  Восстановление прерванного rebuild (`cards_new`) без потери данных.
 - Singleton `settings`: `CHECK (id = 1)` для новых БД, нормализация дублей, `INSERT OR IGNORE`,
   все чтения/записи — `WHERE id = 1`.
 - `reorder` требует полный список ID без дубликатов; `position` пересчитывается на всех путях.
@@ -102,19 +104,19 @@
 
 | ID | Статус | Решение | Проверка |
 |----|--------|---------|----------|
-| C1 | FIXED | CORS удалён, auth-слой, loopback-биндинг | `tests/test_auth.py`; контейнер: 401 без токена / 200 с токеном |
+| C1 | FIXED (условно) | CORS удалён; auth-слой опционален (`AUTH_TOKEN` не задан → API открыт), дефолтный биндинг — loopback | `tests/test_auth.py` (8); контейнер: 401 без токена / 200 с токеном |
 | C2 | FIXED | `safe_upload_path()` + валидатор background | `test_settings.py`, `test_uploads.py`; в контейнере `PUT /api/settings` c `/etc/passwd` → 400 |
 | C3 | FIXED | `model_fields_set` + `apply_settings_patch` | `test_partial_update_preserves_background_image`, `test_explicit_null_clears...` |
-| C4 | FIXED | Проверка каждого редиректа, лимиты, fail-closed | `tests/test_ssrf.py` (10 тестов) |
+| C4 | FIXED | Проверка каждого редиректа, лимиты, fail-closed | `tests/test_ssrf.py` (9 тестов) |
 | C5 | FIXED | Allowlist схем + вырезание control-символов + клиентский `safeUrl` | `test_cards.py`, `components.test.js` |
 | C6 | FIXED | `this._modalState` | `app-modal-state.test.js` (5 тестов) |
-| C7 | FIXED | commit → orphan-diff с проверкой ссылок | `test_import_export.py` (11 тестов) |
+| C7 | FIXED | commit → orphan-diff с проверкой ссылок | `test_import_export.py` (12 тестов) |
 | H1 | FIXED | SVG убран из upload и serve | `test_upload_rejects_svg_even_with_spoofed_content_type` |
 | H2 | FIXED | Детект по магическим байтам | `test_upload_rejects_arbitrary_bytes` |
 | H3 | FIXED | Потоковое чтение с обрывом | `test_upload_rejects_oversized_file` (413) |
 | H4 | FIXED | Стриминг + лимиты + общий таймаут | `test_fetch_favicon_skips_oversized_icon`, `_fetch_limited_aborts_oversized_stream` |
 | H5 | FIXED | WAL + busy_timeout; README про один worker | `database.py`, `README.md` |
-| H6 | FIXED | Транзакции + recovery + `user_version` | `tests/test_database.py` (6 тестов) |
+| H6 | FIXED | Транзакции + recovery (идемпотентно, без гейта по версии) | `tests/test_database.py` (6 тестов) |
 | H7 | FIXED | README/volume приведены к `/app/data` | `README.md`, compose |
 | H8 | FIXED | `USER app`, uid 10001 | `docker exec id` → `uid=10001(app)` |
 | H9 | FIXED | `.dockerignore` | build: COPY `backend/homepage.db` → «excluded by .dockerignore» |
@@ -136,10 +138,26 @@
 
 ## 4. Medium / Low
 
-**Исправлено:** M1, M3, M4, M6–M25, M27–M40; удалён мёртвый код (`models.py`, неиспользуемые
-импорты/методы, `#card-id`, `data-url`, дубли CSS-переменных).
+**Исправлено полностью:** M1, M3, M4, M6–M12, M16–M25, M30, M32, M35–M40; удалён мёртвый код
+(`models.py`, неиспользуемые импорты/методы, `#card-id`, `data-url`, дубли CSS-переменных).
 
-**Осознанно оставлено:**
+**Решено иначе, чем рекомендовало ревью (рабочая альтернатива):**
+
+| ID | Что сделано | Почему так |
+|----|-------------|------------|
+| M13 | Колонка `position` оставлена, но зеркалируется через `position_for()` на create/update/reorder/import | Удаление колонки — миграция данных ради косметики; рассинхрона больше нет |
+| M14 | Backend — единый `config.COLS_PER_ROW`; фронтенд определяет число колонок из computed CSS | Литерал `7` остался только начальным fallback (`app.js:19`, `components.js:140`), но всегда перезаписывается `_detectGridCols()`; API `cols` не понадобился |
+
+**Изменено по явному требованию заказчика (осознанное расхождение с ревью):**
+
+| ID | Состояние | Комментарий |
+|----|-----------|-------------|
+| M27 | `docker-compose.prod.yml` восстановлен, но без `mem_limit`/`cpus` | Лимиты убраны по запросу (§2.5) |
+| M28 | Секция `build:` из обоих compose удалена | Сборка — отдельной командой `docker build`; README поправлен |
+| M29 | `HEALTHCHECK` из Dockerfile удалён | Эндпоинт `/api/health` сохранён, healthcheck не нужен |
+| M31 | `mem_limit`/`cpus`/`pids_limit` убраны, ротация логов оставлена | Лимиты убраны по запросу; лог-ротация — не лимит производительности |
+
+**Осознанно оставлено (риск/фича):**
 
 | ID | Причина |
 |----|---------|
@@ -147,7 +165,8 @@
 | M5 | Внешние `icon_path` — заявленная фича (поле «Icon URL»); схемы провалидированы, трекинг-риск описан |
 | M15 | `POST /api/cards/reorder` оставлен как публичный API (покрыт тестами); мёртвый JS-клиент удалён |
 | M26 | Google Fonts / Wikipedia / внешние иконки — задокументированный остаточный риск |
-| M33/M34 | Нет хэшей зависимостей и digest базового образа |
+| M33 | Точные пины + `pip-audit` в CI; хэши зависимостей не добавлены |
+| M34 | Бейдж Python 3.12+ соответствует образу; digest базового образа не пинован |
 | L2 | Переименование `/api/upload` сломало бы совместимость |
 | L22/L27 | Оставшиеся `!important` и CSS-дубли — визуальный риск без функциональной выгоды |
 
@@ -163,7 +182,9 @@
 | `pip-audit -r backend/requirements.txt` | `No known vulnerabilities found` |
 | `docker build` | `Successfully built` |
 | Smoke контейнера | `/api/health` → `{"status":"healthy","version":"1.2.1"}`, `/` → 200, `PUT /api/settings {"background_image":"/etc/passwd"}` → 400, `docker exec id` → `uid=10001(app)` |
-| Auth-смоук | без токена `/api/full-data` → 401, `GET /api/health` → 200, с `X-Auth-Token` → 200 |
+| Auth-смоук | без токена `/api/full-data` → 401 (с `nosniff`/`DENY` в ответе), `GET /api/health` → 200, с `X-Auth-Token` → 200 |
+| Разбивка pytest | auth 8 · cards 16 · database 6 · health 6 · import/export 12 · settings 8 · ssrf 9 · uploads 15 = **80** |
+| Разбивка vitest | api 6 · app-modal-state 5 · components 7 · drag 8 = **26** |
 | `.dockerignore` | COPY `backend/homepage.db` → «excluded by .dockerignore»; COPY `frontend/index.html` → успех |
 | `docker compose config --quiet` | OK |
 | Bind-mount | данные перенесены из `thule-homepage_thule-data` в `./homepage-data`, карточки и иконка на месте |
@@ -180,8 +201,8 @@ spread, ghost+persist, native drag prevention).
 
 - Образ собран и опубликован: `thuleseeker/thule:latest` и `thuleseeker/thule:1.2.1` (один digest).
 - `docker-compose.yml` запускает сервис на `http://localhost:8000` с bind-mount `./homepage-data`.
-- Коммит `1c4d1c9` в `main`; `CODE_REVIEW.md` намеренно оставлен неотслеживаемым. `git push` не
-  выполнялся.
+- Коммит `1c4d1c9` (код) и `3f4f0aa` (этот отчёт + `CODE_REVIEW.md`), запушены в `origin/main`
+  (`e590caa..3f4f0aa`). Пуш выполнен по SSH: HTTPS-remote без сохранённых креденшелов.
 
 ---
 
@@ -212,3 +233,5 @@ spread, ghost+persist, native drag prevention).
 | `tests/` | 80 backend + 26 frontend тестов |
 | `.github/workflows/ci.yml` | CI: ruff, pytest, vitest, pip-audit, multi-arch build |
 | `README.md`, `DOCKER_HUB_DESCRIPTION.md` | актуальная документация и деплой |
+| `CODE_REVIEW.md` | исходное ревью (коммит `3f4f0aa`) |
+| `REFACTORING_REPORT.md` | этот отчёт (коммит `3f4f0aa`) |

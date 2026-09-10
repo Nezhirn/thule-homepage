@@ -67,12 +67,10 @@ app.include_router(favicon_router)
 app.include_router(data_router)
 
 
-@app.middleware("http")
-async def security_headers_middleware(request, call_next):
-    response = await call_next(request)
-    for header, value in SECURITY_HEADERS.items():
-        response.headers.setdefault(header, value)
-    return response
+# Middleware registration order matters: the middleware added last runs first
+# (outermost). Auth is registered before the response decorators so that even
+# early 401 responses pass through the security-header middleware.
+app.middleware("http")(auth.middleware)
 
 
 @app.middleware("http")
@@ -94,7 +92,12 @@ async def cache_control_middleware(request, call_next):
     return response
 
 
-app.middleware("http")(auth.middleware)
+@app.middleware("http")
+async def security_headers_middleware(request, call_next):
+    response = await call_next(request)
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
 
 
 # ==================== Frontend Serving ====================

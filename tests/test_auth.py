@@ -21,6 +21,9 @@ def test_api_requires_token(auth_client):
     response = auth_client.get("/api/full-data")
     assert response.status_code == 401
     assert response.json() == {"detail": "Unauthorized"}
+    # The security-header middleware must also cover early 401 responses.
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
 
 
 def test_wrong_token_is_rejected(auth_client):

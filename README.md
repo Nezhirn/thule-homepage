@@ -39,13 +39,19 @@ docker run -d -p 127.0.0.1:8000:8000 -v thule-data:/app/data thuleseeker/thule:l
 
 ### Docker Compose
 
-**Development** (сборка локального образа):
+Compose использует образ `thuleseeker/thule:latest` (локальный, если он собран, иначе скачает из Docker Hub):
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-**Production** (опубликованный образ, лимиты ресурсов и ротация логов):
+Для локальной сборки образа:
+
+```bash
+docker build -t thuleseeker/thule:latest .
+```
+
+**Production** (пинованный тег `1.2.1`, bind-mount `./homepage-data`, ротация логов):
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d
