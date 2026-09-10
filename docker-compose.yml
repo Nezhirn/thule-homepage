@@ -5,7 +5,7 @@ services:
     # Bound to loopback by default: the app has no network perimeter of its
     # own. Put it behind a reverse proxy for remote access and set AUTH_TOKEN.
     ports:
-      - "127.0.0.1:8000:8000"
+      - "8000:8000"
     volumes:
       # Persistent data on the host (database + uploaded images).
       # The directory must be writable by uid 10001 (the container user):
@@ -14,8 +14,3 @@ services:
     environment:
       - TZ=Europe/Moscow
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
