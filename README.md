@@ -3,55 +3,49 @@
 ![Описание картинки](https://lh3.googleusercontent.com/d/1mY7msiW8Zi9PQux-jC-hxruk8b1u-WlD)
 **Настраиваемая домашняя страница с карточной сеткой, поиском, фоновыми изображениями и эстетикой Gnome 42.**
 
-![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker)
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
+![License](https://img.shields.io/badge/License-GPLv3-blue.svg)
 
 ## Возможности
 
 - **Карточная сетка** — настраиваемые карточки с иконками, URL и размерами (1×1, 2×1, 1×2, 2×2)
 - **Режим открытия ссылки** — для каждой карточки выбирается, открывать URL в новой или в текущей вкладке
-- **Drag-and-drop** — перетаскивание карточек для изменения порядка (режим редактирования)
+- **Drag-and-drop** — перетаскивание карточек для изменения порядка (режим редактирования), конфликты позиций разрешаются одним пакетом запросов
 - **Поиск** — встроенная строка поиска с автодополнением (Google, DuckDuckGo, Bing, Yandex)
 - **Фоновые изображения** — загрузка с drag-and-drop и настройкой размытия
 - **Светлая/тёмная тема** — переключение с сохранением настроек
-- **Импорт/экспорт** — резервное копирование всех данных в JSON
-- **Авто-фавиконки** — автоматическое получение иконок сайтов через API
-- **Кэширование статики** — иконки и ассеты отдаются с `Cache-Control` (иконки больше не перезагружаются при каждом открытии страницы)
+- **Импорт/экспорт** — резервное копирование всех данных в JSON (транзакционный импорт)
+- **Авто-фавиконки** — автоматическое получение иконок сайтов с SSRF-защитой
+- **Кэширование статики** — иконки и ассеты отдаются с `Cache-Control`
 - **Адаптивность** — поддержка десктопа, планшета и мобильных устройств
-- **Безопасность** — SSRF-защита, валидация URL, sanitization файлов
-
-## Скриншоты
-
-> *Здесь можно добавить скриншоты приложения*
+- **Безопасность** — опциональная токен-аутентификация, allowlist схем URL, валидация загружаемых файлов по сигнатуре, безопасная работа с путями
 
 ## Быстрый старт
 
 ### Docker (рекомендуемый способ)
 
 ```bash
-docker run -d -p 8000:8000 thuleseeker/thule:latest
+docker run -d -p 127.0.0.1:8000:8000 -v thule-data:/app/data thuleseeker/thule:latest
 ```
 
 Откройте [http://localhost:8000](http://localhost:8000).
 
-Для сохранения данных между перезапусками используйте volume:
+Порт привязывается к `127.0.0.1`: приложению не нужен сетевой периметр, а учётных записей у него нет. Для доступа из локальной сети или из интернета **обязательно** задайте `AUTH_TOKEN` и поставьте приложение за reverse proxy с TLS (см. «Безопасность»).
 
-```bash
-docker run -d -p 8000:8000 -v thule-data:/app/backend thuleseeker/thule:latest
-```
+Том `thule-data` хранит БД и загруженные файлы (`/app/data`). Именованный том сохраняет владельца-пользователя контейнера (`uid 10001`). Если используете bind-mount (`-v ./homepage-data:/app/data`), каталог на хосте должен принадлежать `10001:10001`, иначе контейнер не сможет писать.
 
-#### Docker Compose
+### Docker Compose
 
-**Development:**
+**Development** (сборка локального образа):
 
 ```bash
 docker compose up -d --build
 ```
 
-**Production:**
+**Production** (опубликованный образ, лимиты ресурсов и ротация логов):
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d
@@ -59,68 +53,84 @@ docker compose -f docker-compose.prod.yml up -d
 
 ### Ручная установка
 
-#### 1. Установка зависимостей
-
 ```bash
+pip install -r backend/requirements.txt
 cd backend
-pip install -r requirements.txt
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-#### 2. Запуск сервера
+Для зависимостей разработки (pytest, ruff): `pip install -r requirements-dev.txt`.
+
+## Конфигурация
+
+| Переменная | По умолчанию | Описание |
+|------------|--------------|----------|
+| `PORT` | `8000` | Порт, который слушает uvicorn в Docker-образе |
+| `DATABASE_PATH` | `backend/homepage.db` | Путь к файлу SQLite |
+| `UPLOADS_DIR` | `backend/uploads` | Каталог загруженных изображений |
+| `AUTH_TOKEN` | — | Если задан, включает токен-аутентификацию API |
+| `APP_VERSION` | `1.2.1` | Версия, которую отдаёт `/api/health` |
+| `LOG_LEVEL` | `INFO` | Уровень логирования |
+
+### Аутентификация
+
+Аутентификация включается переменной `AUTH_TOKEN` и по умолчанию выключена (рассчитана на `127.0.0.1`). Когда токен задан:
+
+- все `/api/*`, кроме `GET /api/health`, требуют заголовок `X-Auth-Token: <токен>` или `Authorization: Bearer <токен>`;
+- браузер после первого успешного запроса получает HttpOnly cookie `thule_session`, чтобы `<img src="/api/uploads/...">` работали без заголовков; cookie `SameSite=Strict`;
+- веб-интерфейс показывает окно ввода токена и хранит его в `localStorage` браузера;
+- токен никогда не попадает в отдаваемый HTML, поэтому сканирование порта без токена не даёт доступа.
 
 ```bash
-cd backend
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+docker run -d -p 127.0.0.1:8000:8000 \
+  -e AUTH_TOKEN="$(openssl rand -hex 32)" \
+  -v thule-data:/app/data thuleseeker/thule:latest
 ```
-
-#### 3. Открыть в браузере
-
-Перейдите по адресу **[http://localhost:8000](http://localhost:8000)**
 
 ## Архитектура
 
 ```
 homepage/
 ├── backend/
-│   ├── main.py           # FastAPI-приложение, middleware кэширования, монтирование статики
-│   ├── database.py       # SQLite: подключение и миграции
+│   ├── main.py           # FastAPI-приложение, middleware (auth, security headers, cache)
+│   ├── config.py         # Конфигурация из env (пути, лимиты, версия)
+│   ├── auth.py           # Опциональная токен-аутентификация
+│   ├── database.py       # SQLite: подключение, WAL, транзакционные миграции
 │   ├── schemas.py        # Pydantic-схемы запросов/ответов
-│   ├── services.py       # Бизнес-логика (валидация, фавиконки, helpers)
+│   ├── services.py       # Валидация, безопасные пути, SSRF-защита, файлы
+│   ├── ratelimit.py      # Лимит запросов на /api/fetch-icon
 │   ├── routes/           # Маршруты: settings, cards, uploads, favicon, data
-│   ├── requirements.txt  # Python-зависимости
-│   ├── homepage.db       # База данных (gitignored)
-│   └── uploads/          # Загруженные изображения (gitignored)
+│   └── requirements.txt  # Python-зависимости (запинены)
 ├── frontend/
 │   ├── index.html        # HTML-разметка
-│   ├── css/
-│   │   └── styles.css    # Все стили (~1200 строк)
+│   ├── css/styles.css    # Все стили
 │   └── js/
-│       ├── api.js        # API-клиент (fetch wrapper)
-│       ├── components.js # Рендеринг UI (карточки, модалки, темы)
+│       ├── theme-init.js # Применение темы до первой отрисовки
+│       ├── api.js        # API-клиент (fetch wrapper с таймаутом)
+│       ├── components.js # Рендеринг UI (карточки-ссылки, модалки, тосты)
 │       └── app.js        # Главный класс приложения, обработчики событий
+├── tests/                # pytest (backend) и vitest (frontend)
 └── README.md
 ```
 
 ### Фронтенд
 
-Архитектура с тремя уровнями разделения (без ES-модулей, всё через `<script>`):
-
 | Файл | Глобальный объект | Назначение |
 |------|-------------------|------------|
-| `js/api.js` | `window.api` | HTTP-клиент с обёрткой над `fetch` |
-| `js/components.js` | `window.Components` | Функции DOM-рендеринга, тем, загрузка файлов |
+| `js/api.js` | `window.api` | HTTP-клиент: таймаут 10 с, разбор ошибок, заголовок токена |
+| `js/components.js` | `window.Components` | DOM-рендеринг, темы, модалки, загрузка файлов |
 | `js/app.js` | `window.App` | Класс `HomepageApp` — состояние и обработчики |
 
-Состояние (тема, поисковик, режим редактирования) сохраняется в `localStorage`. Карточки хранятся только на сервере.
+Карточки-ссылки рендерятся как настоящие `<a href>` (клавиатура, средняя кнопка, «открыть в новой вкладке»). В режиме редактирования используется `<div>`.
 
 ### Бэкенд
 
-- **FastAPI** + **uvicorn** — сервер и маршрутизация (маршруты разнесены по `routes/`)
-- **SQLite** (raw `sqlite3`, без ORM) — сырые SQL-запросы с `sqlite3.Row`
-- **Соединение на запрос** — каждый endpoint открывает и закрывает своё подключение
-- **Pydantic** — валидация и сериализация (схемы в `schemas.py`)
-- **Загрузка файлов** — UUID-имена для избежания коллизий, ограничение 10 МБ
-- **HTTP-кэширование** — middleware и заголовки `Cache-Control`: иконки/загрузки — `immutable` на год, `/css` и `/js` — 1 час, `index.html` — `no-cache`
+- **FastAPI** + **uvicorn**; синхронные SQLite-маршруты выполняются в threadpool
+- **SQLite** (raw `sqlite3`, без ORM) в режиме WAL с `busy_timeout = 30s`
+- **Соединение на запрос**, транзакция на мутацию; файлы удаляются только после успешного commit
+- **Pydantic** — валидация (ограничение длин, диапазонов, запрет неизвестных полей)
+- **Загрузка файлов** — тип определяется по магическим байтам, UUID-имена, лимит 10 МБ с потоковым чтением
+- **HTTP-кэширование** — иконки/загрузки `immutable` на год, `/css` и `/js` — `no-cache` с ревалидацией (файлы без хэшей), `index.html` — `no-cache`
 
 ## API Reference
 
@@ -128,48 +138,51 @@ homepage/
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/settings` | Получить все настройки пользователя |
-| `PUT` | `/api/settings` | Обновить настройки (`background_image`, `blur_radius`, `dark_mode`) |
+| `GET` | `/api/settings` | Получить настройки |
+| `PUT` | `/api/settings` | Частичное обновление (`background_image`, `blur_radius`, `dark_mode`) |
+
+`PUT` различает «поле не передано» (не трогать) и `null` (очистить). `background_image` принимает только имя локального файла из `uploads/`.
 
 ### Upload
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `POST` | `/api/upload` | Загрузить изображение |
-| `GET` | `/api/uploads/{filename}` | Получить загруженное изображение (`Cache-Control: immutable`, 1 год) |
-| `DELETE` | `/api/upload/{filename}` | Удалить загруженное изображение |
+| `POST` | `/api/upload` | Загрузить изображение (JPEG, PNG, GIF, WebP; до 10 МБ) |
+| `GET` | `/api/uploads/{filename}` | Получить файл (`Cache-Control: immutable`) |
+| `DELETE` | `/api/upload/{filename}` | Удалить файл; 409, если на него ссылаются карточка или фон |
 
 ### Favicon
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `POST` | `/api/fetch-icon` | Получить фавиконку с указанного URL (с SSRF-защитой) |
+| `POST` | `/api/fetch-icon` | Получить фавиконку URL (SSRF-защита, лимит 20 запросов/мин на IP) |
 
 ### Cards
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/cards` | Получить все карточки (сортировка по `grid_row`, `grid_col`) |
-| `POST` | `/api/cards` | Создать карточку |
-| `PUT` | `/api/cards/{card_id}` | Обновить карточку |
-| `DELETE` | `/api/cards/{card_id}` | Удалить карточку |
-| `POST` | `/api/cards/reorder` | Переупорядочить карточки (список ID) |
+| `GET` | `/api/cards` | Все карточки (сортировка по `grid_row`, `grid_col`) |
+| `POST` | `/api/cards` | Создать карточку (авто-размещение с учётом размера) |
+| `PUT` | `/api/cards/{card_id}` | Частичное обновление; `url`/`icon_path` можно очистить через `null` |
+| `DELETE` | `/api/cards/{card_id}` | Удалить карточку (204) |
+| `POST` | `/api/cards/reorder` | Переупорядочить карточки; требует полный список ID без дубликатов |
 
 ### Прочее
 
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| `GET` | `/api/full-data` | Получить настройки + карточки за один запрос |
-| `GET` | `/api/health` | Health check (`{"status": "healthy"}`) |
-| `GET` | `/` | Сервит фронтенд (`index.html`) |
+| `GET` | `/api/full-data` | Настройки + карточки за один запрос |
+| `POST` | `/api/import` | Транзакционный импорт настроек и карточек (полностью деструктивный) |
+| `GET` | `/api/health` | Health check (`{"status": "healthy", "version": "1.2.1"}`) |
+| `GET` | `/` | Отдаёт `index.html` |
 
 ## База данных
 
-### Таблица `settings` (одна строка)
+### Таблица `settings` (одна строка, `id = 1`)
 
 | Столбец | Тип | По умолчанию |
 |---------|-----|--------------|
-| `id` | INTEGER PK | AUTOINCREMENT |
+| `id` | INTEGER PK | 1 (CHECK) |
 | `background_image` | TEXT | NULL |
 | `blur_radius` | INTEGER | 0 |
 | `dark_mode` | INTEGER | 0 |
@@ -183,60 +196,82 @@ homepage/
 | `url` | TEXT | NULL |
 | `icon_path` | TEXT | NULL |
 | `size` | TEXT | `'1x1'` |
-| `position` | INTEGER | 0 |
+| `position` | INTEGER | 0 (производное от `grid_col`/`grid_row`) |
 | `grid_col` | INTEGER | 1 |
 | `grid_row` | INTEGER | 1 |
 | `open_in_new_tab` | INTEGER | 1 |
 
-## Технологии
+Индекс: `idx_cards_grid (grid_row, grid_col)`.
 
-### Бэкенд
-
-| Пакет | Назначение |
-|-------|------------|
-| `fastapi>=0.100.0` | Веб-фреймворк |
-| `uvicorn>=0.23.0` | ASGI-сервер |
-| `pydantic>=2.0.0` | Валидация данных |
-| `python-multipart>=0.0.6` | Парсинг multipart-форм |
-| `httpx>=0.25.0` | HTTP-клиент (для фавиконок) |
-
-### Фронтенд
-
-- **Vanilla JS** — без фреймворков и сборки
-- **CSS Grid** — адаптивная сетка с `repeat(7, minmax(140px, 1fr))`
-- **CSS Custom Properties** — темизация через `:root` / `[data-theme="dark"]`
-- **Google Fonts** — шрифт Inter (400, 500, 600, 700)
+Миграции версионируются (`PRAGMA user_version`) и выполняются в одной транзакции: прерывание не оставляет схему в половинчатом состоянии. Поддерживаются старые схемы (`icon_data`, `tab_id`, `background_data`).
 
 ## Безопасность
 
-- **SSRF-защита** — фавиконки не запрашиваются с приватных/локальных IP
-- **Валидация URL** — блокировка `javascript:`, `data:`, `vbscript:` схем
-- **Path traversal** — блокировка `..`, `/`, `\` в именах файлов
-- **Ограничение размера** — максимум 10 МБ на загружаемый файл
-- **Разрешённые типы** — только JPEG, PNG, GIF, WebP, SVG
-- **Пропуск SVG-фавиконок** — защита от XSS через `<script>` в SVG
+Приложение рассчитано на одного пользователя и по умолчанию привязано к loopback. Аутентификация включается через `AUTH_TOKEN` и должна использоваться при любом сетевом доступе.
+
+- **CORS отключён** — фронтенд отдаётся с того же origin; cross-origin чтение API невозможно
+- **Аутентификация** — общий токен на все `/api/*` кроме health (см. выше)
+- **SSRF** — allowlist `http`/`https`, проверка всех адресов DNS перед запросом (fail-closed), проверка каждого редиректа, лимит ответа 2 МБ
+- **Валидация URL** — allowlist схем (`http`, `https`, `mailto`) после удаления control-символов (`java\tscript:` не проходит)
+- **Path traversal** — `background_image` и `icon_path` принимаются только как локальные имена; единый `safe_upload_path()` с `realpath`/`commonpath` reject-ит абсолютные пути, `..` и symlink-побеги
+- **Загружаемые файлы** — тип определяется по магическим байтам (content-type клиента не учитывается), SVG запрещён, лимит 10 МБ проверяется потоково
+- **Целостность данных** — удаление файлов только после commit БД; импорт валидирует всё до изменения состояния; при сбое транзакция откатывается, файлы не теряются
+- **Заголовки** — `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`
+
+Остаточные риски: DNS rebinding (проверка DNS и подключение не привязаны к одному IP) и сторонние сервисы фронтенда (Google Fonts, подсказки Wikipedia, внешние иконки). Для приватных инсталляций их стоит заменить на локальные ресурсы.
+
+## Бэкап и восстановление
+
+Обычный `cp` файла SQLite во время записи может дать повреждённую копию. Используйте горячий бэкап:
+
+```bash
+# 1. Консистентная копия БД внутри контейнера
+docker exec thule-homepage python -c "\
+import sqlite3; src=sqlite3.connect('/app/data/homepage.db'); \
+dst=sqlite3.connect('/app/data/backup.db'); src.backup(dst); dst.close(); src.close()"
+
+# 2. БД + загруженные файлы (данные лежат в ./homepage-data)
+cp homepage-data/backup.db .
+cp -r homepage-data/uploads ./uploads-backup
+```
+
+Также доступен `Export Data` в настройках — JSON со всеми карточками. Импорт (`Import Data` или `POST /api/import`) полностью заменяет карточки и настройки; валидация выполняется до изменений, а файлы, на которые ссылаются новые карточки, сохраняются.
+
+## Разработка
+
+```bash
+pip install -r requirements-dev.txt
+ruff check backend tests
+pytest                       # 77 backend-тестов
+npm install
+npm test                     # 18 frontend-тестов (vitest + jsdom)
+docker build --network=host -t thule-homepage .
+```
 
 ## Конвенции разработки
 
 ### Бэкенд
 - Pydantic-схемы — в `schemas.py`, бизнес-логика — в `services.py`, маршруты — в `routes/`
-- Каждый endpoint открывает и закрывает своё `sqlite3` подключение
-- Загруженные файлы получают UUID-имена (`uuid.uuid4().hex`)
-- Миграции базы — в `database.py` (старые колонки `icon_data`, `tab_id`, `background_data`; новое поле `open_in_new_tab` добавляется автоматически)
+- Каждый endpoint открывает и закрывает своё `sqlite3`-подключение; мутации — в транзакции
+- Файлы удаляются только после успешного commit, только через `delete_upload_file()`
+- Загруженные файлы получают UUID-имена; путь всегда строится через `safe_upload_path()`
+- Миграции базы — в `database.py`, транзакционные и идемпотентные
 
 ### Фронтенд
-- Без ES-модулей — всё через `<script>` теги, IIFE + глобальные `window` объекты
-- CSS Grid с явными `grid-column`/`grid-row` для карточек разных размеров
-- Режим редактирования через `body.edit-mode` класс
-- Drag-and-drop — мышиный (не HTML5 Drag and Drop API), привязан к grid-контейнеру
+- Без ES-модулей — классические `<script>` с `defer`, глобальные `window`-объекты
+- Состояние модалки карточки — в `this._modalState`, а не в замыканиях
+- Ссылки-карточки — реальные `<a>`, в edit-mode — `<div>`
+- CSS Grid с явными `grid-column`/`grid-row` на десктопе; на мобильных позиции сбрасываются
 
 ## Адаптивные брейкпоинты
 
-| Ширина экрана | Колонок | Описание |
-|---------------|---------|----------|
-| > 1024px | 7 (default) | Полный десктоп |
-| 768px — 1024px | 4 | Планшет |
-| < 768px | 2 | Мобильный |
+| Ширина экрана | Колонок |
+|---------------|---------|
+| > 1024px | 7 |
+| 769–1024px | 4 |
+| 481–768px | 3 |
+| 381–480px | 2 |
+| ≤ 380px | 1 |
 
 ## Развёртывание
 
@@ -246,36 +281,26 @@ homepage/
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Это запустит:
-- Контейнер с приложением на порту `8000`
-- Volume `thule-data` для хранения БД и загруженных файлов
-- Health-check для мониторинга доступности
-- Ограничение ресурсов (512MB RAM, 0.5 CPU)
+Запускает контейнер на `127.0.0.1:8000` с bind-mount `./homepage-data` и ротацией логов.
+
+### Однопроцессный режим
+
+Запускайте **один** worker: приложение однопользовательское. SQLite работает в режиме WAL и переживает параллельные запросы, но `--workers 4` не даёт выигрыша и создаёт лишние писатели.
 
 ```bash
-docker compose -f docker-compose.yml up -d
-```
-
-### Ручной запуск
-
-```bash
-# Запуск с uvicorn
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
-
-# Или через Gunicorn
-gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
 ### Docker Hub
 
-Образ доступен по адресу: [thuleseeker/thule](https://hub.docker.com/r/thuleseeker/thule)
+Образ: [thuleseeker/thule](https://hub.docker.com/r/thuleseeker/thule)
 
 ```bash
 docker pull thuleseeker/thule:latest
 ```
 
-Теги: `latest`, `1.1.0`, `1.0.0`
+Теги: `latest`, `1.2.1`.
 
 ## Лицензия
 
-MIT
+Проект распространяется под лицензией **GNU General Public License v3.0** — см. файл [LICENSE](LICENSE).

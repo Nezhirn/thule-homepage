@@ -17,6 +17,18 @@ venv/
 
 # Uploads
 uploads/
+homepage-data/
+
+# Secrets
+.auth_token
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Tests / tooling caches
+.pytest_cache/
+.ruff_cache/
 
 # IDE
 .vscode/

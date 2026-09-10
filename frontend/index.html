@@ -8,7 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=__VERSION__">
+    <script src="js/theme-init.js?v=__VERSION__"></script>
 </head>
 <body>
     <!-- Background Container -->
@@ -23,35 +24,36 @@
         <header class="header">
             <div class="search-wrapper">
                 <div class="search-container">
-                    <div class="search-engine-select" id="search-engine-btn" title="Search engine">
+                    <div class="search-engine-select" id="search-engine-btn" role="button" tabindex="0"
+                         aria-haspopup="listbox" aria-expanded="false" aria-label="Select search engine" title="Search engine">
                         <img id="search-engine-icon" src="https://www.google.com/favicon.ico" alt="">
                     </div>
-                    <input type="text" class="search-input" id="search-input" placeholder="Search..." autocomplete="off">
-                    <button class="search-submit-btn" id="search-submit-btn" title="Search">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <input type="text" class="search-input" id="search-input" placeholder="Search..." autocomplete="off" aria-label="Search">
+                    <button class="search-submit-btn" id="search-submit-btn" title="Search" aria-label="Search">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <circle cx="11" cy="11" r="8"></circle>
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
                     </button>
                 </div>
-                <div class="search-engine-dropdown" id="engine-dropdown">
-                    <div class="search-engine-option" data-engine="google" data-url="https://www.google.com/search?q="><img src="https://www.google.com/favicon.ico" alt=""><span>Google</span></div>
-                    <div class="search-engine-option" data-engine="duckduckgo" data-url="https://duckduckgo.com/?q="><img src="https://duckduckgo.com/favicon.ico" alt=""><span>DuckDuckGo</span></div>
-                    <div class="search-engine-option" data-engine="bing" data-url="https://www.bing.com/search?q="><img src="https://www.bing.com/favicon.ico" alt=""><span>Bing</span></div>
-                    <div class="search-engine-option" data-engine="yandex" data-url="https://yandex.com/search/?text="><img src="https://yandex.com/favicon.ico" alt=""><span>Yandex</span></div>
+                <div class="search-engine-dropdown" id="engine-dropdown" role="listbox" aria-label="Search engines">
+                    <div class="search-engine-option" role="option" tabindex="0" data-engine="google"><img src="https://www.google.com/favicon.ico" alt=""><span>Google</span></div>
+                    <div class="search-engine-option" role="option" tabindex="0" data-engine="duckduckgo"><img src="https://duckduckgo.com/favicon.ico" alt=""><span>DuckDuckGo</span></div>
+                    <div class="search-engine-option" role="option" tabindex="0" data-engine="bing"><img src="https://www.bing.com/s/a/bing.ico" alt=""><span>Bing</span></div>
+                    <div class="search-engine-option" role="option" tabindex="0" data-engine="yandex"><img src="https://yandex.com/favicon.ico" alt=""><span>Yandex</span></div>
                 </div>
-                <div class="search-suggestions" id="search-suggestions"></div>
+                <div class="search-suggestions" id="search-suggestions" role="listbox" aria-label="Search suggestions"></div>
             </div>
             <div class="header-actions">
-                <button class="btn btn-edit-mode" id="edit-mode-btn" title="Edit mode">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="btn btn-edit-mode" id="edit-mode-btn" title="Edit mode" aria-label="Toggle edit mode">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                     <span>Edit</span>
                 </button>
-                <button class="btn btn-icon" id="settings-btn" title="Settings">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="btn btn-icon" id="settings-btn" title="Settings" aria-label="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
@@ -68,20 +70,20 @@
     </div>
 
     <!-- Floating Action Buttons -->
-    <button class="btn btn-fab btn-add-card-fab" id="add-card-btn" title="Add Card">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button class="btn btn-fab btn-add-card-fab" id="add-card-btn" title="Add Card" aria-label="Add card">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
     </button>
 
     <!-- Settings Modal -->
-    <div class="modal-overlay" id="settings-modal">
+    <div class="modal-overlay" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
         <div class="modal">
             <div class="modal-header">
-                <h2 class="modal-title">Settings</h2>
-                <button class="btn btn-icon modal-close" data-close="settings-modal">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <h2 class="modal-title" id="settings-modal-title">Settings</h2>
+                <button class="btn btn-icon modal-close" data-close="settings-modal" aria-label="Close settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
@@ -92,7 +94,7 @@
                     <label class="form-label">Background Image</label>
                     <div class="image-upload" id="bg-upload-area">
                         <div class="upload-placeholder" id="bg-upload-placeholder">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                                 <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                 <polyline points="21 15 16 10 5 21"></polyline>
@@ -101,8 +103,8 @@
                         </div>
                         <div class="upload-preview" id="bg-upload-preview" style="display: none;">
                             <img id="bg-preview-img" src="" alt="Background preview">
-                            <button class="btn btn-icon btn-remove" id="bg-remove-btn" title="Remove">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <button class="btn btn-icon btn-remove" id="bg-remove-btn" title="Remove" aria-label="Remove background">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                     <line x1="18" y1="6" x2="6" y2="18"></line>
                                     <line x1="6" y1="6" x2="18" y2="18"></line>
                                 </svg>
@@ -112,9 +114,9 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Background Blur</label>
+                    <label class="form-label" for="blur-slider">Background Blur</label>
                     <div class="slider-container">
-                        <input type="range" class="slider" id="blur-slider" min="0" max="20" value="0">
+                        <input type="range" class="slider" id="blur-slider" min="0" max="50" value="0">
                         <span class="slider-value" id="blur-value">0px</span>
                     </div>
                 </div>
@@ -138,48 +140,47 @@
     </div>
 
     <!-- Add/Edit Card Modal -->
-    <div class="modal-overlay" id="card-modal">
+    <div class="modal-overlay" id="card-modal" role="dialog" aria-modal="true" aria-labelledby="card-modal-title">
         <div class="modal modal-card">
             <div class="modal-header">
                 <h2 class="modal-title" id="card-modal-title">Add Card</h2>
-                <button class="btn btn-icon modal-close" data-close="card-modal">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="btn btn-icon modal-close" data-close="card-modal" aria-label="Close card editor">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
                     </svg>
                 </button>
             </div>
             <div class="modal-body">
-                <input type="hidden" id="card-id">
                 <div class="form-group">
-                    <label class="form-label">Title</label>
+                    <label class="form-label" for="card-title">Title</label>
                     <input type="text" class="form-input" id="card-title" placeholder="Card title">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">URL (optional)</label>
+                    <label class="form-label" for="card-url">URL (optional)</label>
                     <div class="url-input-group">
                         <input type="url" class="form-input" id="card-url" placeholder="https://example.com">
-                        <button class="btn btn-secondary btn-fetch-icon" id="fetch-icon-btn" title="Fetch favicon">🔍</button>
+                        <button class="btn btn-secondary btn-fetch-icon" id="fetch-icon-btn" title="Fetch favicon" aria-label="Fetch favicon">🔍</button>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Size</label>
                     <div class="size-selector" id="size-selector">
-                        <button class="size-btn active" data-size="1x1">1x1</button>
-                        <button class="size-btn" data-size="2x1">2x1</button>
-                        <button class="size-btn" data-size="1x2">1x2</button>
-                        <button class="size-btn" data-size="2x2">2x2</button>
+                        <button type="button" class="size-btn active" data-size="1x1">1x1</button>
+                        <button type="button" class="size-btn" data-size="2x1">2x1</button>
+                        <button type="button" class="size-btn" data-size="1x2">1x2</button>
+                        <button type="button" class="size-btn" data-size="2x2">2x2</button>
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Grid Position</label>
                     <div class="grid-pos-group">
                         <div class="grid-pos-field">
-                            <label class="grid-pos-label">Column</label>
-                            <input type="number" class="form-input form-input-short" id="card-grid-col" min="1" max="10" value="1">
+                            <label class="grid-pos-label" for="card-grid-col">Column</label>
+                            <input type="number" class="form-input form-input-short" id="card-grid-col" min="1" max="7" value="1">
                         </div>
                         <div class="grid-pos-field">
-                            <label class="grid-pos-label">Row</label>
+                            <label class="grid-pos-label" for="card-grid-row">Row</label>
                             <input type="number" class="form-input form-input-short" id="card-grid-row" min="1" max="100" value="1">
                         </div>
                     </div>
@@ -195,14 +196,14 @@
                 <div class="form-group">
                     <label class="form-label">Icon/Image</label>
                     <div class="form-group" style="margin-bottom: var(--space-sm);">
-                        <label class="form-label" style="font-size: 12px; color: var(--text-secondary);">Icon URL</label>
+                        <label class="form-label" for="card-icon-url" style="font-size: 12px; color: var(--text-secondary);">Icon URL</label>
                         <div class="url-input-group">
                             <input type="url" class="form-input" id="card-icon-url" placeholder="https://example.com/icon.png">
                         </div>
                     </div>
                     <div class="image-upload" id="icon-upload-area">
                         <div class="upload-placeholder" id="icon-upload-placeholder">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                                 <circle cx="8.5" cy="8.5" r="1.5"></circle>
                                 <polyline points="21 15 16 10 5 21"></polyline>
@@ -211,8 +212,8 @@
                         </div>
                         <div class="upload-preview upload-preview-icon" id="icon-upload-preview" style="display: none;">
                             <img id="icon-preview-img" src="" alt="Icon preview">
-                            <button class="btn btn-icon btn-remove" id="icon-remove-btn" title="Remove">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <button class="btn btn-icon btn-remove" id="icon-remove-btn" title="Remove" aria-label="Remove icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                     <line x1="18" y1="6" x2="6" y2="18"></line>
                                     <line x1="6" y1="6" x2="18" y2="18"></line>
                                 </svg>
@@ -232,13 +233,42 @@
         </div>
     </div>
 
+    <!-- Authentication Modal (shown only when AUTH_TOKEN is configured) -->
+    <div class="modal-overlay" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h2 class="modal-title" id="auth-modal-title">Authentication</h2>
+                <button class="btn btn-icon modal-close" data-close="auth-modal" aria-label="Close authentication">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="auth-form">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label" for="auth-token-input">API token</label>
+                        <input type="password" class="form-input" id="auth-token-input" autocomplete="current-password">
+                        <p class="auth-error" id="auth-error" role="alert"></p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="modal-footer-right">
+                        <button type="submit" class="btn btn-primary">Unlock</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
-    <div class="toast" id="toast">
+    <div class="toast" id="toast" role="status" aria-live="polite">
         <span class="toast-message" id="toast-message"></span>
     </div>
 
-    <script src="js/api.js"></script>
-    <script src="js/components.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/api.js?v=__VERSION__" defer></script>
+    <script src="js/components.js?v=__VERSION__" defer></script>
+    <script src="js/app.js?v=__VERSION__" defer></script>
 </body>
 </html>

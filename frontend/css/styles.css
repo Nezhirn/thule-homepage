@@ -17,7 +17,6 @@
     --shadow-color: rgba(0, 0, 0, 0.08);
     --shadow-hover: rgba(0, 0, 0, 0.12);
     --success: #33d17a;
-    --warning: #f6d32d;
     --danger: #e01b24;
     --overlay: rgba(0, 0, 0, 0.4);
 
@@ -30,6 +29,7 @@
     --space-2xl: 48px;
 
     /* Border radius */
+    --radius-xs: 4px;
     --radius-sm: 6px;
     --radius-md: 12px;
     --radius-lg: 16px;
@@ -38,14 +38,13 @@
     /* Transitions */
     --transition-fast: 150ms ease-out;
     --transition-normal: 200ms ease-out;
-    --transition-slow: 300ms ease-out;
 
     /* Font */
     --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* Dark theme */
-[data-theme="dark"] {
+html[data-theme="dark"] {
     --bg-primary: #1e1e1e;
     --bg-secondary: #2d2d2d;
     --bg-tertiary: #383838;
@@ -88,6 +87,11 @@ a {
 
 a:hover {
     text-decoration: underline;
+}
+
+:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 button {
@@ -174,6 +178,10 @@ input, textarea, select {
     background: var(--bg-tertiary);
     border-radius: var(--radius-md);
     padding: var(--space-xs);
+}
+
+.search-container:focus-within {
+    box-shadow: 0 0 0 3px rgba(53, 132, 228, 0.15);
 }
 
 .search-engine-select {
@@ -308,13 +316,6 @@ input, textarea, select {
     font-size: 14px;
 }
 
-.header-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-}
-
 .header-actions {
     display: flex;
     align-items: center;
@@ -386,8 +387,6 @@ body.edit-mode .card {
 }
 
 body.edit-mode .grid-cell.cell-highlight {
-    border-color: var(--accent);
-    background: rgba(53, 132, 228, 0.12);
     z-index: 15;
 }
 
@@ -409,6 +408,10 @@ body.edit-mode .grid-cell.cell-highlight {
 
 .card {
     cursor: default;
+}
+
+a.card {
+    cursor: pointer;
 }
 
 /* Edit mode: show edit elements */
@@ -456,13 +459,24 @@ body.edit-mode .btn-add-card-fab {
     cursor: grabbing;
 }
 
-.card.dragging {
-    opacity: 0.5;
-    transform: scale(0.95);
+/* Icons must never start a native HTML drag — it would swallow the pointer
+ * events that drive the custom drag & drop ghost. */
+.card img {
+    -webkit-user-drag: none;
+    user-select: none;
 }
 
-.card.drag-over {
-    border-top: 3px solid var(--accent);
+body.edit-mode .card {
+    touch-action: none;
+}
+
+.card.drag-source {
+    opacity: 0.3;
+}
+
+.drag-ghost {
+    animation: none !important;
+    pointer-events: none !important;
 }
 
 /* Card menu button (three dots) */
@@ -580,6 +594,7 @@ body.edit-mode .btn-add-card-fab {
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
 }
 
@@ -812,6 +827,13 @@ body.edit-mode .btn-add-card-fab {
     color: var(--text-secondary);
 }
 
+.auth-error {
+    color: var(--danger);
+    font-size: 13px;
+    margin-top: var(--space-xs);
+    min-height: 18px;
+}
+
 .form-input-short {
     width: 80px;
     max-width: 80px;
@@ -835,10 +857,9 @@ body.edit-mode .btn-add-card-fab {
 
 /* Drag & drop highlights */
 .cell-highlight {
-    background: var(--accent) !important;
-    border: 2px dashed var(--accent) !important;
+    background: rgba(53, 132, 228, 0.18);
+    border: 2px dashed var(--accent);
     border-radius: var(--radius-lg);
-    opacity: 0.4;
 }
 
 .card.drag-over {
@@ -958,6 +979,11 @@ body.edit-mode .btn-add-card-fab {
     background: var(--border);
     border-radius: 3px;
     outline: none;
+}
+
+.slider:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .slider::-webkit-slider-thumb {
@@ -1106,9 +1132,15 @@ body.edit-mode .btn-add-card-fab {
         padding: var(--space-sm);
     }
 
+    /* Only four columns fit here — drop the desktop inline grid positions. */
+    .card {
+        grid-column: auto !important;
+        grid-row: auto !important;
+    }
+
     .card[data-size="2x1"] { grid-column: span 2 !important; }
     .card[data-size="2x2"] { grid-column: span 2 !important; }
-    .card[data-size="1x2"] { min-height: 160px; }
+    .card[data-size="1x2"] { grid-column: span 1 !important; min-height: 160px; }
 }
 
 /* --- Small tablet / Large phone (up to 768px) --- */
@@ -1366,6 +1398,7 @@ body.edit-mode .btn-add-card-fab {
     .card-title {
         font-size: 13px;
         -webkit-line-clamp: 3;
+        line-clamp: 3;
     }
 
     .card-menu-btn {
@@ -1581,6 +1614,7 @@ body.edit-mode .btn-add-card-fab {
         font-size: 14px;
         text-align: left;
         -webkit-line-clamp: 2;
+        line-clamp: 2;
     }
 
     .card[data-size="2x1"],
@@ -1611,13 +1645,12 @@ body.edit-mode .btn-add-card-fab {
     animation: slideUp 0.3s ease-out;
 }
 
-/* Loading state */
-.loading {
-    opacity: 0.6;
-    pointer-events: none;
+/* Scrollbar styling */
+html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;

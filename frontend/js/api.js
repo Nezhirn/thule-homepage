@@ -4,46 +4,73 @@
  */
 
 const API_BASE_URL = window.location.origin + '/api';
+const API_TIMEOUT_MS = 10000;
+const AUTH_TOKEN_KEY = 'authToken';
 
 class ApiClient {
-    constructor(baseUrl = API_BASE_URL) {
+    constructor(baseUrl = API_BASE_URL, timeout = API_TIMEOUT_MS) {
         this.baseUrl = baseUrl;
+        this.timeout = timeout;
+    }
+
+    getAuthToken() {
+        try { return localStorage.getItem(AUTH_TOKEN_KEY); } catch (_) { return null; }
+    }
+
+    setAuthToken(token) {
+        try {
+            if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+            else localStorage.removeItem(AUTH_TOKEN_KEY);
+        } catch (_) { /* storage unavailable */ }
     }
 
     async request(endpoint, options = {}) {
         const url = `${this.baseUrl}${endpoint}`;
-        const config = {
-            ...options,
-        };
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), this.timeout);
 
-        // Set headers if not already set
-        if (!config.headers) {
-            config.headers = {};
-        }
-
-        // Only set Content-Type for non-FormData requests
+        const headers = { ...(options.headers || {}) };
         if (!(options.body instanceof FormData)) {
-            config.headers['Content-Type'] = 'application/json';
+            headers['Content-Type'] = 'application/json';
         }
+        const token = this.getAuthToken();
+        if (token) headers['X-Auth-Token'] = token;
 
         try {
-            const response = await fetch(url, config);
+            const response = await fetch(url, { ...options, headers, signal: controller.signal });
 
-            // Handle 204 No Content
-            if (response.status === 204) {
-                return {};
+            const raw = await response.text();
+            let data = {};
+            if (raw) {
+                try { data = JSON.parse(raw); } catch (_) { data = null; }
             }
-
-            const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.detail || 'Request failed');
+                const detail = data ? data.detail : null;
+                let message;
+                if (Array.isArray(detail)) {
+                    message = detail.map(item => item.msg || JSON.stringify(item)).join('; ');
+                } else if (typeof detail === 'string' && detail) {
+                    message = detail;
+                } else {
+                    message = `HTTP ${response.status}`;
+                }
+                const error = new Error(message);
+                error.status = response.status;
+                throw error;
             }
 
-            return data;
+            return data === null ? {} : data;
         } catch (error) {
-            console.error(`API Error [${endpoint}]:`, error);
+            if (error.name === 'AbortError') {
+                const timeoutError = new Error('Request timed out');
+                timeoutError.status = 0;
+                timeoutError.timeout = true;
+                throw timeoutError;
+            }
             throw error;
+        } finally {
+            clearTimeout(timer);
         }
     }
 
@@ -84,13 +111,6 @@ class ApiClient {
         });
     }
 
-    async reorderCards(data) {
-        return this.request('/cards/reorder', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    }
-
     async fetchIcon(url) {
         return this.request('/fetch-icon', {
             method: 'POST',
@@ -120,9 +140,11 @@ class ApiClient {
         return this.request('/full-data');
     }
 
-    // Health Check
-    async healthCheck() {
-        return this.request('/health');
+    async importData(payload) {
+        return this.request('/import', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
     }
 }
 
