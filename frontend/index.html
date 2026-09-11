@@ -28,7 +28,8 @@
                          aria-haspopup="listbox" aria-expanded="false" aria-label="Select search engine" title="Search engine">
                         <img id="search-engine-icon" src="https://www.google.com/favicon.ico" alt="">
                     </div>
-                    <input type="text" class="search-input" id="search-input" placeholder="Search..." autocomplete="off" aria-label="Search">
+                    <input type="text" class="search-input" id="search-input" placeholder="Search..." autocomplete="off" aria-label="Search"
+                           role="combobox" aria-controls="search-suggestions" aria-expanded="false" aria-autocomplete="list">
                     <button class="search-submit-btn" id="search-submit-btn" title="Search" aria-label="Search">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <circle cx="11" cy="11" r="8"></circle>
@@ -177,7 +178,7 @@
                     <div class="grid-pos-group">
                         <div class="grid-pos-field">
                             <label class="grid-pos-label" for="card-grid-col">Column</label>
-                            <input type="number" class="form-input form-input-short" id="card-grid-col" min="1" max="7" value="1">
+                            <input type="number" class="form-input form-input-short" id="card-grid-col" min="1" value="1">
                         </div>
                         <div class="grid-pos-field">
                             <label class="grid-pos-label" for="card-grid-row">Row</label>

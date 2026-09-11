@@ -1,6 +1,6 @@
 {
   "name": "thule-homepage",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "Personal homepage with a card grid, search, and background images.",
   "repository": {

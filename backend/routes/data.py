@@ -4,6 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, HTTPException
 
+import config
 from database import get_db_connection
 from schemas import (
     FullDataResponse,
@@ -47,7 +48,7 @@ def get_full_data():
 
         cursor.execute("SELECT * FROM cards ORDER BY grid_row, grid_col")
         cards = [row_to_card(card_row) for card_row in cursor.fetchall()]
-        return FullDataResponse(settings=settings, cards=cards)
+        return FullDataResponse(settings=settings, cards=cards, cols=config.COLS_PER_ROW)
     finally:
         conn.close()
 

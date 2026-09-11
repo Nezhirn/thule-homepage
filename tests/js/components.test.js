@@ -21,6 +21,15 @@ describe('Components.safeUrl', () => {
         expect(Components.safeUrl('')).toBeNull();
         expect(Components.safeUrl(null)).toBeNull();
     });
+
+    it('treats a scheme-less host as external https, not as our own origin (FE-14)', () => {
+        expect(Components.safeUrl('example.com')).toBe('https://example.com/');
+        expect(Components.safeUrl('  example.com/path  ')).toBe('https://example.com/path');
+    });
+
+    it('keeps genuinely relative paths on the current origin', () => {
+        expect(Components.safeUrl('/local/page')).toBe(`${window.location.origin}/local/page`);
+    });
 });
 
 describe('Components.renderSuggestions', () => {
@@ -34,7 +43,9 @@ describe('Components.renderSuggestions', () => {
         expect(container.querySelector('.suggestion-item').hasAttribute('data-q')).toBe(false);
         expect(container.querySelector('.suggestion-text').textContent).toBe(hostile);
         expect(container.querySelector('[onmouseover]')).toBeNull();
-        expect(container.querySelector('.suggestion-item').getAttributeNames()).toEqual(['class', 'role']);
+        /* Only our own known-safe attributes — nothing derived from the text. */
+        expect(container.querySelector('.suggestion-item').getAttributeNames().sort())
+            .toEqual(['aria-selected', 'class', 'id', 'role']);
     });
 
     it('invokes the callback with the selected text', () => {
@@ -45,6 +56,38 @@ describe('Components.renderSuggestions', () => {
         container.querySelectorAll('.suggestion-item')[1].click();
 
         expect(onSelect).toHaveBeenCalledWith('beta');
+    });
+});
+
+describe('Components.setActiveSuggestion (FE-19)', () => {
+    function build() {
+        const container = document.createElement('div');
+        container.id = 'search-suggestions';
+        const input = document.createElement('input');
+        document.body.append(container, input);
+        Components.renderSuggestions(container, ['alpha', 'beta'], () => {});
+        return { container, input };
+    }
+
+    it('marks the active option and points the combobox at it', () => {
+        const { container, input } = build();
+
+        expect(Components.setActiveSuggestion(container, input, 1)).toBe('beta');
+
+        const options = container.querySelectorAll('.suggestion-item');
+        expect(options[1].getAttribute('aria-selected')).toBe('true');
+        expect(options[0].getAttribute('aria-selected')).toBe('false');
+        expect(input.getAttribute('aria-activedescendant')).toBe(options[1].id);
+    });
+
+    it('clears the selection for index -1', () => {
+        const { container, input } = build();
+        Components.setActiveSuggestion(container, input, 1);
+
+        expect(Components.setActiveSuggestion(container, input, -1)).toBeNull();
+
+        expect(container.querySelector('[aria-selected="true"]')).toBeNull();
+        expect(input.hasAttribute('aria-activedescendant')).toBe(false);
     });
 });
 

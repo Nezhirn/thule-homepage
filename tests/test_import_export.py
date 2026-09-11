@@ -1,6 +1,8 @@
 """Full-data export and transactional import invariants."""
 from helpers import create_card, upload_image
 
+import config
+
 CARD_FIELDS = ("title", "url", "icon_path", "size", "grid_col", "grid_row", "open_in_new_tab")
 SETTINGS_FIELDS = ("background_image", "blur_radius", "dark_mode")
 
@@ -18,6 +20,12 @@ def test_full_data_returns_cards_in_grid_order(client):
     create_card(client, title="c", grid_col=1, grid_row=2)
     titles = [card["title"] for card in client.get("/api/full-data").json()["cards"]]
     assert titles == ["a", "b", "c"]
+
+
+def test_full_data_exposes_model_column_count(client):
+    """The client must use the model width from the server, not the viewport."""
+    body = client.get("/api/full-data").json()
+    assert body["cols"] == config.COLS_PER_ROW == 7
 
 
 def test_import_replaces_all_cards(client):

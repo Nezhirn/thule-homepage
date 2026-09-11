@@ -6,7 +6,7 @@ this module instead of copying the values at import time).
 """
 import os
 
-APP_VERSION = os.environ.get("APP_VERSION", "1.2.1")
+APP_VERSION = os.environ.get("APP_VERSION", "1.2.2")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)

@@ -51,7 +51,7 @@ docker compose up -d
 docker build -t thuleseeker/thule:latest .
 ```
 
-**Production** (пинованный тег `1.2.1`, bind-mount `./homepage-data`, ротация логов):
+**Production** (пинованный тег `1.2.2`, bind-mount `./homepage-data`, ротация логов):
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d
@@ -75,7 +75,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 | `DATABASE_PATH` | `backend/homepage.db` | Путь к файлу SQLite |
 | `UPLOADS_DIR` | `backend/uploads` | Каталог загруженных изображений |
 | `AUTH_TOKEN` | — | Если задан, включает токен-аутентификацию API |
-| `APP_VERSION` | `1.2.1` | Версия, которую отдаёт `/api/health` |
+| `APP_VERSION` | `1.2.2` | Версия, которую отдаёт `/api/health` |
 | `LOG_LEVEL` | `INFO` | Уровень логирования |
 
 ### Аутентификация
@@ -179,7 +179,7 @@ homepage/
 |-------|----------|----------|
 | `GET` | `/api/full-data` | Настройки + карточки за один запрос |
 | `POST` | `/api/import` | Транзакционный импорт настроек и карточек (полностью деструктивный) |
-| `GET` | `/api/health` | Health check (`{"status": "healthy", "version": "1.2.1"}`) |
+| `GET` | `/api/health` | Health check (`{"status": "healthy", "version": "1.2.2"}`) |
 | `GET` | `/` | Отдаёт `index.html` |
 
 ## База данных
@@ -305,7 +305,7 @@ uvicorn main:app --host 127.0.0.1 --port 8000
 docker pull thuleseeker/thule:latest
 ```
 
-Теги: `latest`, `1.2.1`.
+Теги: `latest`, `1.2.2`.
 
 ## Лицензия
 

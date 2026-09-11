@@ -307,7 +307,8 @@ input, textarea, select {
     transition: background var(--transition-fast);
 }
 
-.suggestion-item:hover {
+.suggestion-item:hover,
+.suggestion-item.active {
     background: var(--bg-tertiary);
 }
 
@@ -397,7 +398,6 @@ body.edit-mode .grid-cell.cell-highlight {
 /* Card sizes for grid — use explicit grid-column/row from data attrs set by JS */
 .card {
     min-height: 140px;
-    transition: grid-column var(--transition-normal), grid-row var(--transition-normal);
 }
 
 /* ==================== Cards ==================== */
@@ -1643,6 +1643,20 @@ body.edit-mode .card {
 
 .card {
     animation: slideUp 0.3s ease-out;
+}
+
+/* Respect the OS "reduce motion" setting: keep state changes instant rather
+ * than animating them. Transitions are collapsed instead of removed so code
+ * that waits on transitionend still fires. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 /* Scrollbar styling */

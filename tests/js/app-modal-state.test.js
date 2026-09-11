@@ -85,6 +85,19 @@ describe('card modal state', () => {
         expect(window.api.updateCard.mock.calls[0][1].icon_path).toBe('https://cdn.example.com/icon.png');
     });
 
+    it('clears an external icon URL when the field is emptied (FE-09)', async () => {
+        app._editCard({ ...card, icon_path: 'https://cdn.example.com/icon.png' });
+        const input = document.getElementById('card-icon-url');
+        expect(input.value).toBe('https://cdn.example.com/icon.png');
+
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+        document.getElementById('card-save-btn').click();
+
+        await vi.waitFor(() => expect(window.api.updateCard).toHaveBeenCalled());
+        expect(window.api.updateCard.mock.calls[0][1].icon_path).toBeNull();
+    });
+
     it('reverts the theme when the server write fails (review M21)', async () => {
         app.settings = { background_image: null, blur_radius: 0, dark_mode: false };
         window.api.updateSettings = vi.fn(async () => { throw new Error('offline'); });

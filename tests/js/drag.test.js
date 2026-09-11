@@ -25,6 +25,7 @@ async function makeApp(cards = []) {
         getFullData: vi.fn(async () => ({
             settings: { background_image: null, blur_radius: 0, dark_mode: false },
             cards,
+            cols: 7,
         })),
         getCards: vi.fn(async () => cards),
         updateCard: vi.fn(async () => ({})),
@@ -41,7 +42,8 @@ describe('grid planning helpers', () => {
     beforeEach(async () => {
         loadIndexBody();
         app = await makeApp();
-        app.gridCols = 7;
+        app.modelCols = 7;
+        app.viewportCols = 7;
     });
 
     it('plans a single move into a free cell', () => {
@@ -72,7 +74,7 @@ describe('grid planning helpers', () => {
 
         const [col, row] = app._findFreeSpot(app.cards[0], 7, 1, new Set());
 
-        expect(col + 2 - 1).toBeLessThanOrEqual(app.gridCols);
+        expect(col + 2 - 1).toBeLessThanOrEqual(app.modelCols);
         expect([col, row]).toEqual([6, 1]);
     });
 
@@ -89,6 +91,8 @@ describe('grid planning helpers', () => {
 
         expect(app._calcGridPos(110, 1000, metrics)).toEqual([1, 10]);
         expect(app._calcGridPos(10000, 10000, metrics)).toEqual([4, 91]);
+        expect(app.viewportCols).toBe(7); // helper must not mutate app state
+        expect(app.modelCols).toBe(7);
     });
 
     it('spreads overlapping 2x2 cards without leaving gaps in the occupancy', () => {
@@ -106,6 +110,49 @@ describe('grid planning helpers', () => {
         expect(overlaps).toBe(false);
         expect(app._persistMoves).toHaveBeenCalledWith([{ id: 2, col: 3, row: 1 }]);
     });
+
+    it('never rewrites the model because of a narrow viewport (FE-01)', () => {
+        app.viewportCols = 1;
+        app.cards = [
+            makeCard({ id: 1, grid_col: 5, grid_row: 1 }),
+            makeCard({ id: 2, grid_col: 7, grid_row: 2 }),
+            makeCard({ id: 3, grid_col: 1, grid_row: 4 }),
+        ];
+        const before = app.cards.map(c => [c.grid_col, c.grid_row]);
+        app._persistMoves = vi.fn();
+
+        app._autoSpreadCards();
+
+        expect(app.cards.map(c => [c.grid_col, c.grid_row])).toEqual(before);
+        expect(app._persistMoves).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the model width is unknown', () => {
+        app.modelCols = null;
+        app.cards = [makeCard({ id: 1, grid_col: 4, grid_row: 1 })];
+        app._persistMoves = vi.fn();
+
+        app._autoSpreadCards();
+
+        expect(app.cards[0].grid_col).toBe(4);
+        expect(app._persistMoves).not.toHaveBeenCalled();
+    });
+
+    it('parses viewport columns and ignores unresolved repeat() values (FE-05)', () => {
+        const grid = document.getElementById('cards-grid');
+        const original = window.getComputedStyle;
+        try {
+            window.getComputedStyle = () => ({ gridTemplateColumns: '100px 120px 140px' });
+            app._detectViewportCols();
+            expect(app.viewportCols).toBe(3);
+
+            window.getComputedStyle = () => ({ gridTemplateColumns: 'repeat(7, minmax(140px, 1fr))' });
+            app._detectViewportCols();
+            expect(app.viewportCols).toBe(3);
+        } finally {
+            window.getComputedStyle = original;
+        }
+    });
 });
 
 describe('drag & drop', () => {
@@ -121,7 +168,8 @@ describe('drag & drop', () => {
 
         app = await makeApp();
         app.editMode = true;
-        app.gridCols = 7;
+        app.modelCols = 7;
+        app.viewportCols = 7;
         app.cards = [makeCard()];
         app.renderCards();
 
@@ -179,5 +227,19 @@ describe('drag & drop', () => {
         await new Promise(resolve => setTimeout(resolve, 10));
         expect(window.api.updateCard).not.toHaveBeenCalled();
         expect(document.querySelector('.drag-ghost')).toBeNull();
+    });
+
+    it('refuses to drag when the viewport is narrower than the model (FE-02)', async () => {
+        app.viewportCols = 1;
+
+        const cardEl = grid.querySelector('.card');
+        cardEl.dispatchEvent(pointerEvent('pointerdown', 100, 80));
+        expect(document.querySelector('.drag-ghost')).toBeNull();
+
+        grid.dispatchEvent(pointerEvent('pointermove', 180, 80));
+        grid.dispatchEvent(pointerEvent('pointerup', 180, 80));
+
+        await new Promise(resolve => setTimeout(resolve, 10));
+        expect(window.api.updateCard).not.toHaveBeenCalled();
     });
 });

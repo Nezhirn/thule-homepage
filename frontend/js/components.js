@@ -3,14 +3,24 @@
  */
 
 const Components = {
-    _lastFocused: null,
+    _lastFocused: [],
     _toastTimer: null,
 
-    /** Validate/pars a URL and return it only for safe schemes. */
+    /** Validate/parse a URL and return it only for safe schemes.
+     *
+     *  A scheme-less host ("example.com") is treated as an external https link
+     *  rather than being resolved against our own origin — resolving it would
+     *  silently turn the card into a link back to the homepage. Values that
+     *  start with "/" stay relative, since those are genuine same-origin links.
+     */
     safeUrl(value) {
         if (!value) return null;
+        const trimmed = String(value).trim();
+        if (!trimmed) return null;
+        const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed);
+        const candidate = hasScheme || trimmed.startsWith('/') ? trimmed : `https://${trimmed}`;
         try {
-            const parsed = new URL(value, window.location.origin);
+            const parsed = new URL(candidate, window.location.origin);
             if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) return null;
             return parsed.href;
         } catch (_) {
@@ -137,7 +147,7 @@ const Components = {
      * elements are not recreated and the browser does not re-fetch them on
      * every render (resize, drag, edit-mode is the only full rebuild trigger).
      */
-    renderCards(cards, container, onEdit, onDelete, editMode, cols = 7) {
+    renderCards(cards, container, onEdit, onDelete, editMode, cols, showCells = true) {
         /* Empty state */
         if (cards.length === 0) {
             container.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg><p>No cards yet</p><span style="font-size:14px;opacity:0.7">Click the + button to add your first card</span></div>';
@@ -184,7 +194,7 @@ const Components = {
             if (!keepIds.has(id)) el.remove();
         });
 
-        Components._renderGridCells(cards, container, editMode, cols);
+        Components._renderGridCells(cards, container, editMode && showCells, cols);
     },
 
     /** Render/refresh the edit-mode grid-cell placeholder layer.
@@ -249,13 +259,17 @@ const Components = {
         container.appendChild(wrap);
     },
 
-    /** Render search suggestions without injecting untrusted text into HTML. */
+    /** Render search suggestions without injecting untrusted text into HTML.
+     *  Each option gets a stable id so the combobox can point at the active one
+     *  via aria-activedescendant. */
     renderSuggestions(container, items, onSelect) {
         container.innerHTML = '';
-        items.forEach(text => {
+        items.forEach((text, index) => {
             const item = document.createElement('div');
             item.className = 'suggestion-item';
+            item.id = `${container.id || 'suggestions'}-option-${index}`;
             item.setAttribute('role', 'option');
+            item.setAttribute('aria-selected', 'false');
             const span = document.createElement('span');
             span.className = 'suggestion-text';
             span.textContent = text;
@@ -264,6 +278,26 @@ const Components = {
             item.addEventListener('click', () => onSelect(text));
             container.appendChild(item);
         });
+    },
+
+    /** Highlight the option at `index` (-1 clears the selection) and report it
+     *  to assistive tech. Returns the option's text, or null when nothing is
+     *  active, so the caller can act on the current highlight. */
+    setActiveSuggestion(container, input, index) {
+        const options = Array.from(container.querySelectorAll('.suggestion-item'));
+        options.forEach((option, i) => {
+            const active = i === index;
+            option.classList.toggle('active', active);
+            option.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        const current = index >= 0 ? options[index] : null;
+        if (current) {
+            input?.setAttribute('aria-activedescendant', current.id);
+            current.scrollIntoView?.({ block: 'nearest' });
+            return current.textContent;
+        }
+        input?.removeAttribute('aria-activedescendant');
+        return null;
     },
 
     updateBackground(imageUrl, blurRadius) {
@@ -289,7 +323,7 @@ const Components = {
     showModal(id) {
         const modal = document.getElementById(id);
         if (!modal) return;
-        Components._lastFocused = document.activeElement;
+        Components._lastFocused.push(document.activeElement);
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
         const focusable = Components._focusable(modal);
@@ -306,10 +340,10 @@ const Components = {
         if (!modal) return;
         modal.classList.remove('active');
         document.body.style.overflow = '';
-        if (Components._lastFocused && Components._lastFocused.focus) {
-            Components._lastFocused.focus();
-        }
-        Components._lastFocused = null;
+        /* Restore focus to the element that opened the modal; the stack keeps
+         * this correct when modals are opened on top of each other. */
+        const previous = Components._lastFocused.pop();
+        if (previous && previous.focus) previous.focus();
     },
 
     showToast(msg, type = 'success') {
@@ -337,7 +371,7 @@ const Components = {
         area.addEventListener('click', () => input.click());
         input.addEventListener('change', e => { if (e.target.files[0]) { onFile(e.target.files[0]); input.value = ''; } });
         area.addEventListener('dragover', e => { e.preventDefault(); area.style.borderColor = 'var(--accent)'; });
-        area.addEventListener('dragleave', () => { area.style.borderColor = ''; });
+        area.addEventListener('dragleave', e => { if (!area.contains(e.relatedTarget)) area.style.borderColor = ''; });
         area.addEventListener('drop', e => { e.preventDefault(); area.style.borderColor = ''; if (e.dataTransfer.files[0] && e.dataTransfer.files[0].type.startsWith('image/')) onFile(e.dataTransfer.files[0]); });
     }
 };

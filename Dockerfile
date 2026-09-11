@@ -7,7 +7,7 @@ FROM python:3.12-slim
 LABEL maintainer="thuleseeker"
 LABEL description="Homepage API - FastAPI-based customizable homepage with cards"
 
-ARG APP_VERSION=1.2.1
+ARG APP_VERSION=1.2.2
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \

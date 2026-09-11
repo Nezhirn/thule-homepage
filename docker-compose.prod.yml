@@ -1,6 +1,6 @@
 services:
   homepage:
-    image: thuleseeker/thule:1.2.1
+    image: thuleseeker/thule:1.2.2
     container_name: thule-homepage
     # Bound to loopback by default. Set AUTH_TOKEN before exposing the port.
     ports:

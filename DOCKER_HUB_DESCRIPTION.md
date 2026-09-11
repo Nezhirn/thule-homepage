@@ -89,7 +89,7 @@ services:
 | `DATABASE_PATH` | `/app/data/homepage.db` | SQLite database path |
 | `UPLOADS_DIR` | `/app/data/uploads` | Uploaded images directory |
 | `AUTH_TOKEN` | — | Shared API token; when set, authentication is required |
-| `APP_VERSION` | `1.2.1` | Version reported by `/api/health` |
+| `APP_VERSION` | `1.2.2` | Version reported by `/api/health` |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ## Health Check
@@ -98,7 +98,7 @@ services:
 GET http://localhost:8000/api/health
 ```
 
-Response: `{"status": "healthy", "version": "1.2.1"}`
+Response: `{"status": "healthy", "version": "1.2.2"}`
 
 ## API Endpoints
 
@@ -126,6 +126,7 @@ All `/api/*` endpoints except `GET /api/health` require `X-Auth-Token: <token>` 
 | Tag | Description |
 |-----|-------------|
 | `latest` | Latest stable build |
+| `1.2.2` | Frontend refactor: card positions are no longer rewritten on narrow viewports |
 | `1.2.1` | Security hardening, data-integrity fixes, tests, documentation |
 | `1.1.0` | Per-card open mode, asset caching, frontend stability fixes |
 | `1.0.0` | Initial release |

@@ -107,6 +107,9 @@ class FetchIconResponse(BaseModel):
 class FullDataResponse(BaseModel):
     settings: SettingsResponse
     cards: List[CardResponse]
+    # Width of the data model. The client must use this for coordinates and
+    # must not infer it from the current viewport.
+    cols: int = config.COLS_PER_ROW
 
 
 class MessageResponse(BaseModel):

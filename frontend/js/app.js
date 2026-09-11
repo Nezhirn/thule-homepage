@@ -16,7 +16,13 @@ class HomepageApp {
         this.cards = [];
         this.editingCard = null;
         this.editMode = false;
-        this.gridCols = 7;
+        /* Two different concepts, deliberately separate:
+         * - modelCols: width of the data model (canonical 7, comes from the API);
+         * - viewportCols: how many columns the CSS grid renders right now.
+         * Model coordinates are only ever computed against modelCols. */
+        this.modelCols = null;
+        this.viewportCols = null;
+        this._dragHintShown = false;
 
         // Search
         this.searchEngine = localStorage.getItem('searchEngine') || 'google';
@@ -36,12 +42,27 @@ class HomepageApp {
         this.init();
     }
 
-    /* Detect grid columns from actual CSS computed style */
-    _detectGridCols() {
+    /** How many columns the CSS grid renders at the current viewport.
+     *  Used only for drag hit-testing, never for model coordinates.
+     *  Unresolvable computed values (e.g. `repeat(...)` on a hidden element)
+     *  are ignored so we never silently guess a wrong column count. */
+    _detectViewportCols() {
         const grid = document.getElementById('cards-grid');
         if (!grid) return;
-        const detected = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-        if (detected > 0) this.gridCols = detected;
+        const raw = getComputedStyle(grid).gridTemplateColumns;
+        if (!raw || raw === 'none' || /repeat\(/i.test(raw)) return;
+        const tracks = raw.trim().split(/\s+/).filter(Boolean);
+        if (!tracks.length) return;
+        if (!tracks.every(track => /^-?\d*\.?\d+(px|fr|%|em|rem|vw|vh)?$/.test(track))) return;
+        this.viewportCols = tracks.length;
+    }
+
+    /** Drag is only safe when the viewport shows the full model: otherwise CSS
+     *  auto-flows the cards and pixel coordinates cannot be mapped to the model. */
+    _dragAllowed() {
+        return this.modelCols != null
+            && this.viewportCols != null
+            && this.viewportCols >= this.modelCols;
     }
 
     _engineUrl(engine) { return (SEARCH_ENGINES[engine] || SEARCH_ENGINES.google).url; }
@@ -52,7 +73,7 @@ class HomepageApp {
         this.editMode = localStorage.getItem('editMode') === 'true';
         this._applyEditMode();
         this._updateEngineIcon();
-        this._detectGridCols();
+        this._detectViewportCols();
         this._setupModals();
         this._setupLogin();
         this._setupSearch();
@@ -63,7 +84,7 @@ class HomepageApp {
         let resizeTimer;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => { this._detectGridCols(); this.renderCards(); }, 150);
+            resizeTimer = setTimeout(() => { this._detectViewportCols(); this.renderCards(); }, 150);
         });
     }
 
@@ -255,6 +276,16 @@ class HomepageApp {
             const card = e.target.closest('.card');
             if (!card) return;
             if (e.target.closest('.card-menu-btn') || e.target.closest('.card-dropdown')) return;
+            /* At narrow viewports CSS auto-flows the cards, so pixel coordinates
+             * cannot be mapped to model cells — dragging is disabled instead of
+             * writing meaningless positions to the server. */
+            if (!this._dragAllowed()) {
+                if (!this._dragHintShown) {
+                    this._dragHintShown = true;
+                    Components.showToast('Drag & drop works on wider screens', 'error');
+                }
+                return;
+            }
             e.preventDefault();
 
             if (e.pointerType === 'touch') {
@@ -325,7 +356,7 @@ class HomepageApp {
         const gap = parseFloat(style.gap) || 16;
         const paddingLeft = parseFloat(style.paddingLeft) || parseFloat(style.padding) || 0;
         const paddingTop = parseFloat(style.paddingTop) || parseFloat(style.padding) || 0;
-        const cols = Math.max(1, style.gridTemplateColumns.split(' ').filter(Boolean).length);
+        const cols = Math.max(1, this.viewportCols || this.modelCols || 1);
         const cell = grid.querySelector('.grid-cell');
         const measuredCellH = cell ? cell.getBoundingClientRect().height : 0;
         const cellH = measuredCellH || parseFloat(style.gridAutoRows) || 160;
@@ -333,10 +364,10 @@ class HomepageApp {
         return { gridRect, gap, paddingLeft, paddingTop, cellH, colWidth, cols };
     }
 
-    /* Calculate grid column/row from absolute coordinates */
+    /* Calculate grid column/row from absolute coordinates (pure helper —
+     * never mutates app state). */
     _calcGridPos(mx, my, metrics) {
         const m = metrics || this._gridMetrics();
-        this.gridCols = m.cols;
         const col = Math.floor((mx - m.gridRect.left - m.paddingLeft) / (m.colWidth + m.gap)) + 1;
         const row = Math.floor((my - m.gridRect.top - m.paddingTop) / (m.cellH + m.gap)) + 1;
         return [Math.max(1, Math.min(col, m.cols)), Math.max(1, row)];
@@ -418,7 +449,7 @@ class HomepageApp {
                    [wantCol + offset, wantRow - offset], [wantCol - offset, wantRow + offset]];
 
             for (const [tc, tr] of candidates) {
-                if (tc < 1 || tr < 1 || tc + cw - 1 > this.gridCols) continue;
+                if (tc < 1 || tr < 1 || tc + cw - 1 > (this.modelCols || 1)) continue;
                 let ok = true;
                 for (let cc = tc; cc < tc + cw; cc++)
                     for (let cr = tr; cr < tr + ch; cr++)
@@ -526,13 +557,26 @@ class HomepageApp {
             });
         });
 
+        /* The URL field is the source of truth for a typed icon; iconFile only
+         * ever holds an uploaded/fetched filename. Emptying the field clears a
+         * typed URL instead of silently resurrecting the previous one. */
         iconUrl?.addEventListener('input', () => {
             const v = iconUrl.value.trim();
+            const preview = document.getElementById('icon-preview-img');
+            const placeholder = document.getElementById('icon-upload-placeholder');
+            const previewBox = document.getElementById('icon-upload-preview');
             if (v) {
-                this._modalState.iconFile = v;
-                document.getElementById('icon-preview-img').src = v;
-                document.getElementById('icon-upload-placeholder').style.display = 'none';
-                document.getElementById('icon-upload-preview').style.display = 'block';
+                preview.src = v;
+                placeholder.style.display = 'none';
+                previewBox.style.display = 'block';
+            } else if (this._modalState.iconFile) {
+                preview.src = Components.resolveIconUrl(this._modalState.iconFile);
+                placeholder.style.display = 'none';
+                previewBox.style.display = 'block';
+            } else {
+                preview.src = '';
+                placeholder.style.display = 'flex';
+                previewBox.style.display = 'none';
             }
         });
 
@@ -707,30 +751,68 @@ class HomepageApp {
             window.open(this.searchUrl + encodeURIComponent(text), '_blank', 'noopener,noreferrer');
         };
 
+        /* Index of the keyboard-highlighted suggestion; -1 means "none", in
+         * which case Enter searches for whatever is typed in the field. */
+        this._sugIndex = -1;
+        const closeSuggestions = () => {
+            sug.classList.remove('show');
+            this._sugIndex = -1;
+            Components.setActiveSuggestion(sug, inp, -1);
+            inp?.setAttribute('aria-expanded', 'false');
+        };
+
         inp?.addEventListener('input', () => {
             const q = inp.value.trim();
-            if (q.length < 2) { sug.classList.remove('show'); return; }
+            if (q.length < 2) { closeSuggestions(); return; }
             clearTimeout(this.searchTimeout);
             this.searchTimeout = setTimeout(async () => {
                 const res = await this._suggestions(q);
                 if (res === null) return; // request was superseded; leave UI untouched
                 if (res.length) {
                     Components.renderSuggestions(sug, res, text => {
-                        sug.classList.remove('show');
+                        closeSuggestions();
                         inp.value = text;
                         openSearch(text);
                     });
                     sug.classList.add('show');
-                } else sug.classList.remove('show');
+                    this._sugIndex = -1;
+                    inp.setAttribute('aria-expanded', 'true');
+                } else closeSuggestions();
             }, 300);
         });
 
         inp?.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { const q = inp.value.trim(); sug.classList.remove('show'); openSearch(q); }
-            else if (e.key === 'Escape') { sug.classList.remove('show'); inp.blur(); }
+            const open = sug.classList.contains('show');
+            const count = open ? sug.querySelectorAll('.suggestion-item').length : 0;
+
+            if (open && count && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                e.preventDefault();
+                const step = e.key === 'ArrowDown' ? 1 : -1;
+                /* Wrap through a "nothing selected" slot so the user can always
+                 * get back to their own typed query. */
+                this._sugIndex = this._sugIndex + step;
+                if (this._sugIndex >= count) this._sugIndex = -1;
+                else if (this._sugIndex < -1) this._sugIndex = count - 1;
+                Components.setActiveSuggestion(sug, inp, this._sugIndex);
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const active = open && this._sugIndex >= 0
+                    ? sug.querySelectorAll('.suggestion-item')[this._sugIndex]
+                    : null;
+                const text = active ? active.textContent : inp.value.trim();
+                if (active) inp.value = text;
+                closeSuggestions();
+                openSearch(text);
+            } else if (e.key === 'Escape') {
+                closeSuggestions();
+                inp.blur();
+            }
         });
         inp?.addEventListener('blur', () => {
-            setTimeout(() => { sug.classList.remove('show'); clearTimeout(this.searchTimeout); }, 150);
+            setTimeout(() => { closeSuggestions(); clearTimeout(this.searchTimeout); }, 150);
         });
         document.getElementById('search-submit-btn')?.addEventListener('click', () => openSearch(inp.value.trim()));
 
@@ -769,7 +851,9 @@ class HomepageApp {
             const d = await api.getFullData();
             this.settings = d.settings;
             this.cards = d.cards;
-            /* Resolve overlaps locally, render immediately, persist in background */
+            /* The data model width comes from the server, never from the viewport. */
+            if (d.cols) this.modelCols = d.cols;
+            /* Resolve model-level overlaps locally, render immediately, persist in background */
             this._autoSpreadCards();
             this._applySettings();
             this.renderCards();
@@ -786,13 +870,14 @@ class HomepageApp {
     }
 
     /**
-     * Resolve cards that share a grid cell. Computes new positions synchronously
-     * (no network round-trips on the critical path), updates local state so the
-     * first render is already correct, then persists the moves concurrently in
-     * the background — start-up never blocks on the server.
+     * Resolve cards that share a cell *in the data model*. Uses modelCols — the
+     * canonical server-side width — so a narrow viewport can never rewrite the
+     * stored layout. Computes new positions synchronously, updates local state
+     * so the first render is correct, then persists only genuine collisions.
      */
     _autoSpreadCards() {
-        const cols = Math.max(1, this.gridCols);
+        const cols = this.modelCols;
+        if (!cols) return; // model width unknown — never guess
         const occupied = new Set();
         const toSpread = [];
 
@@ -848,7 +933,7 @@ class HomepageApp {
         const successCount = results.length - failCount;
         if (failCount > 0) {
             results.forEach((r, i) => { if (r.status === 'rejected') console.error('[auto-spread] failed', moves[i].id, r.reason); });
-            Components.showToast(`Spread ${successCount} of ${moves.length} overlapping cards (${failCount} failed)`, 'error');
+            Components.showToast(`Fixed ${successCount} of ${moves.length} overlapping cards (${failCount} failed)`, 'error');
             /* Some moves were not persisted — resync local state with the server
              * so the optimistic layout doesn't diverge from what's stored. */
             try {
@@ -856,7 +941,7 @@ class HomepageApp {
                 this.renderCards();
             } catch (_) { /* leave optimistic state if reload also fails */ }
         } else {
-            Components.showToast(`Spread ${successCount} overlapping cards`);
+            Components.showToast(`Fixed ${successCount} overlapping cards`);
         }
     }
 
@@ -876,6 +961,9 @@ class HomepageApp {
             }
         }
         Components.setTheme(this.settings.dark_mode ? 'dark' : 'light');
+        /* The column field is bounded by the data model width, not the viewport. */
+        const colInput = document.getElementById('card-grid-col');
+        if (colInput && this.modelCols) colInput.max = String(this.modelCols);
     }
 
     renderCards() {
@@ -885,7 +973,10 @@ class HomepageApp {
             card => this._editCard(card),
             card => this._deleteCard(card),
             this.editMode,
-            this.gridCols
+            this.modelCols,
+            /* Edit-mode placeholders are model-space; hide them when the
+             * viewport is too narrow to map pixels to the model. */
+            this.editMode && this._dragAllowed()
         );
     }
 
@@ -900,7 +991,13 @@ class HomepageApp {
 
     _editCard(card) {
         this.editingCard = card;
-        this._modalState = { size: card.size || '1x1', iconFile: card.icon_path || null };
+        const externalIcon = !!(card.icon_path && /^https?:\/\//i.test(card.icon_path));
+        this._modalState = {
+            size: card.size || '1x1',
+            /* iconFile only ever holds a local upload/fetch filename; a typed
+             * URL lives in the input field itself. */
+            iconFile: card.icon_path && !externalIcon ? card.icon_path : null,
+        };
         document.getElementById('card-modal-title').textContent = 'Edit Card';
         document.getElementById('card-title').value = card.title;
         document.getElementById('card-url').value = card.url || '';
@@ -969,7 +1066,11 @@ class HomepageApp {
         const link = document.createElement('a');
         link.href = url;
         link.download = 'homepage-backup-' + new Date().toISOString().split('T')[0] + '.json';
+        /* The anchor must be in the document for the click to trigger a
+         * download in Firefox. */
+        document.body.appendChild(link);
         link.click();
+        link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         Components.showToast('Exported');
     }
